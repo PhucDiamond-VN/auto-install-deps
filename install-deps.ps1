@@ -15,7 +15,6 @@ $Green = "Green"
 $Yellow = "Yellow"
 $Blue = "Blue"
 $Cyan = "Cyan"
-$Magenta = "Magenta"
 
 function Write-ColorOutput {
     param(
@@ -141,7 +140,7 @@ function Install-Chocolatey {
     try {
         Set-ExecutionPolicy Bypass -Scope Process -Force
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
         
         # Refresh environment variables
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
@@ -195,19 +194,19 @@ function Install-VisualStudio {
         
         # Install with C++ workload and additional components including MSBuild
         Write-Info "Installing Visual Studio Build Tools with C++ workload and MSBuild..."
-        $args = @("--quiet", "--wait", "--add", "Microsoft.VisualStudio.Workload.VCTools")
-        $args += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.19041"
-        $args += "--add", "Microsoft.VisualStudio.Component.Windows11SDK.22621"
-        $args += "--add", "Microsoft.VisualStudio.Component.MSBuild"
-        $args += "--add", "Microsoft.VisualStudio.Component.Roslyn.Compiler"
-        $args += "--add", "Microsoft.VisualStudio.Component.TextTemplating"
-        $args += "--add", "Microsoft.VisualStudio.Component.NuGet"
-        $args += "--add", "Microsoft.VisualStudio.Component.WebDeploy"
-        $args += "--add", "Microsoft.VisualStudio.Component.MSBuild.MSIL"
-        $args += "--add", "Microsoft.VisualStudio.Component.MSBuild.x64"
+        $vsArgs = @("--quiet", "--wait", "--add", "Microsoft.VisualStudio.Workload.VCTools")
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.19041"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows11SDK.22621"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.MSBuild"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Roslyn.Compiler"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.TextTemplating"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NuGet"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.WebDeploy"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.MSBuild.MSIL"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.MSBuild.x64"
         
-        Write-Info "Installation arguments: $($args -join ' ')"
-        Start-Process -FilePath $vsInstaller -ArgumentList $args -Wait
+        Write-Info "Installation arguments: $($vsArgs -join ' ')"
+        Start-Process -FilePath $vsInstaller -ArgumentList $vsArgs -Wait
         
         # Wait for installation to complete and verify
         Start-Sleep -Seconds 10
