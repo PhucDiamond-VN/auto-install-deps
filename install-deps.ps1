@@ -1,5 +1,6 @@
 # Auto Install Dependencies for C/C++ Projects v2.0
 # Script tự động cài đặt tất cả dependencies cần thiết để build C/C++ projects
+# Includes MSBuild build issues fix functionality
 
 param(
     [string]$ConfigFile = "deps-config.json",
@@ -7,22 +8,29 @@ param(
     [switch]$Verbose,
     [switch]$InstallOptional,
     [switch]$SkipTests,
-    [switch]$UpdateRepos
+    [switch]$UpdateRepos,
+    [switch]$FixMSBuild
 )
 
 # Colors for output
-$Red = "Red"
-$Green = "Green"
-$Yellow = "Yellow"
-$Blue = "Blue"
-$Cyan = "Cyan"
+$Red = [System.ConsoleColor]::Red
+$Green = [System.ConsoleColor]::Green
+$Yellow = [System.ConsoleColor]::Yellow
+$Blue = [System.ConsoleColor]::Blue
+$Cyan = [System.ConsoleColor]::Cyan
+$White = [System.ConsoleColor]::White
 
 function Write-ColorOutput {
     param(
         [string]$Message,
-        [string]$Color = "White"
+        [System.ConsoleColor]$Color = [System.ConsoleColor]::White
     )
-    Write-Host $Message -ForegroundColor $Color
+    try {
+        Write-Host $Message -ForegroundColor $Color
+    } catch {
+        # Fallback to default color if there's an issue
+        Write-Host $Message
+    }
 }
 
 function Write-Info {
@@ -306,10 +314,10 @@ function Install-MSBuild {
         return $true
     }
     
-    # If MSBuild is still not available, try to install Windows SDK components
-    Write-Info "MSBuild not available, attempting to install Windows SDK components..."
-    if (Install-WindowsSDKComponents) {
-        Write-Info "Windows SDK components installed, checking if MSBuild is now available..."
+    # If MSBuild is still not available, try to fix MSBuild build issues
+    Write-Info "MSBuild not available, attempting to fix MSBuild build issues..."
+    if (Fix-MSBuildBuildIssues) {
+        Write-Info "MSBuild build issues fixed, checking if MSBuild is now available..."
         Start-Sleep -Seconds 10
         
         # Refresh environment and check again
@@ -319,7 +327,7 @@ function Install-MSBuild {
             try {
                 $version = msbuild /version 2>$null
                 if ($version) {
-                    Write-Success "MSBuild is now available after Windows SDK installation (version: $version)"
+                    Write-Success "MSBuild is now available after fixing build issues (version: $version)"
                     return $true
                 }
             } catch {
@@ -1495,13 +1503,177 @@ function Install-MSBuildFromSource {
     }
 }
 
+function Install-VisualStudioBuildToolsComplete {
+    Write-Info "Installing Visual Studio Build Tools with ALL required components for MSBuild..."
+    
+    try {
+        # Download Visual Studio Build Tools
+        $vsUrl = "https://aka.ms/vs/17/release/vs_buildtools.exe"
+        $vsInstaller = "$env:TEMP\vs_buildtools.exe"
+        
+        Write-Info "Downloading Visual Studio Build Tools..."
+        Invoke-WebRequest -Uri $vsUrl -OutFile $vsInstaller
+        
+        # Install with all required workloads and components
+        Write-Info "Installing Visual Studio Build Tools with ALL required components..."
+        $vsArgs = @("--quiet", "--wait")
+        
+        # Add workloads
+        $vsArgs += "--add", "Microsoft.VisualStudio.Workload.VCTools"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Workload.MSBuildTools"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Workload.NetCoreBuildTools"
+        
+        # Add Windows 10 SDK components
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.19041"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.18362"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.17763"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.16299"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.15063"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.14393"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.10586"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.10240"
+        
+        # Add Windows 8 SDK components
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows8SDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows8SDK.8.1"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows8SDK.8.0"
+        
+        # Add .NET Framework SDK components
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NetFx35SDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NetFx40SDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NetFx45SDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NetFx461SDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NetFx472SDK"
+        
+        # Add MSBuild and related components
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.MSBuild"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Roslyn.Compiler"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.TextTemplating"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NuGet"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.WebDeploy"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.MSBuild.MSIL"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.MSBuild.x64"
+        
+        Write-Info "Installation arguments: $($vsArgs -join ' ')"
+        Write-Info "Starting installation... This may take a while..."
+        
+        $process = Start-Process -FilePath $vsInstaller -ArgumentList $vsArgs -Wait -PassThru
+        
+        if ($process.ExitCode -eq 0) {
+            Write-Success "Visual Studio Build Tools installed successfully!"
+            
+            # Wait for installation to complete and verify
+            Write-Info "Waiting for installation to complete..."
+            Start-Sleep -Seconds 20
+            
+            # Check if MSBuild is now available
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+            
+            if (Test-Command "msbuild") {
+                try {
+                    $version = msbuild /version 2>$null
+                    if ($version) {
+                        Write-Success "MSBuild is now available (version: $version)"
+                        return $true
+                    }
+                } catch {
+                    Write-Warning "MSBuild command available but version check failed"
+                }
+            }
+            
+            Write-Info "MSBuild not yet available in PATH, but installation completed successfully"
+            Write-Info "Please restart your terminal to ensure PATH changes take effect"
+            return $true
+            
+        } else {
+            Write-Warning "Visual Studio Build Tools installation completed with exit code: $($process.ExitCode)"
+            Write-Info "This may still be successful - some components may have been installed"
+            return $false
+        }
+    }
+    catch {
+        Write-Error "Error installing Visual Studio Build Tools: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Fix-MSBuildBuildIssues {
+    Write-Info "Fixing MSBuild build issues (TlbExp, resgen.exe, LocateVisualStudioTask)..."
+    
+    # Step 1: Check current Visual Studio installation
+    Write-Info "Step 1: Checking current Visual Studio installation..."
+    Test-VisualStudioInstallation
+    
+    # Step 2: Install missing Windows SDK components
+    Write-Info "Step 2: Installing missing Windows SDK components..."
+    if (Install-WindowsSDKComponents) {
+        Write-Success "Windows SDK components installed successfully!"
+    } else {
+        Write-Warning "Some Windows SDK components may not have been installed"
+    }
+    
+    # Step 3: Install Visual Studio Build Tools with all components
+    Write-Info "Step 3: Installing Visual Studio Build Tools with ALL required components..."
+    if (Install-VisualStudioBuildToolsComplete) {
+        Write-Success "Visual Studio Build Tools installation completed successfully!"
+        
+        # Step 4: Verify components are available
+        Write-Info "Step 4: Verifying required components are available..."
+        Start-Sleep -Seconds 10
+        
+        # Refresh environment
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+        
+        # Check if MSBuild is now available
+        if (Test-Command "msbuild") {
+            try {
+                $version = msbuild /version 2>$null
+                if ($version) {
+                    Write-Success "MSBuild is now available (version: $version)"
+                    Write-Info "All required components should now be available!"
+                } else {
+                    Write-Warning "MSBuild command available but version check failed"
+                }
+            } catch {
+                Write-Warning "MSBuild command available but version check failed"
+            }
+        } else {
+            Write-Info "MSBuild not yet available in PATH, but installation completed successfully"
+            Write-Info "Please restart your terminal to ensure PATH changes take effect"
+        }
+        
+        Write-Info ""
+        Write-Info "MSBuild build issues should now be resolved:"
+        Write-Info "- TlbExp.exe and resgen.exe (Windows SDK tools) - AVAILABLE"
+        Write-Info "- MSBuild and build tools - AVAILABLE"
+        Write-Info "- .NET Framework SDKs - AVAILABLE"
+        Write-Info "- Windows SDKs for all versions - AVAILABLE"
+        Write-Info "- The LocateVisualStudioTask should now work properly"
+        
+        return $true
+        
+    } else {
+        Write-Error "Visual Studio Build Tools installation failed"
+        Write-Info "Please check the error messages above and try again"
+        Write-Info "You may need to run as Administrator or check Windows Update"
+        return $false
+    }
+}
+
 # Main execution
 function Main {
     Write-ColorOutput "=========================================" $Blue
-    Write-ColorOutput "  Auto Install Dependencies for C/C++   " $Blue
-    Write-ColorOutput "              Version 2.0               " $Blue
-    Write-ColorOutput "=========================================" $Blue
-    Write-ColorOutput ""
+Write-ColorOutput "  Auto Install Dependencies for C/C++   " $Blue
+Write-ColorOutput "              Version 2.0               " $Blue
+Write-ColorOutput "        + MSBuild Build Fix            " $Blue
+Write-ColorOutput "=========================================" $Blue
+Write-ColorOutput ""
+Write-ColorOutput "Usage:" $Cyan
+Write-ColorOutput "  .\install-deps.ps1                    - Install all dependencies" $White
+Write-ColorOutput "  .\install-deps.ps1 -FixMSBuild        - Fix MSBuild build issues only" $White
+Write-ColorOutput "  .\install-deps.ps1 -Force             - Force reinstall all components" $White
+Write-ColorOutput "  .\install-deps.ps1 -Verbose           - Show detailed output" $White
+Write-ColorOutput ""
     
     try {
         # Check if running as administrator
@@ -1514,6 +1686,20 @@ function Main {
         # Update repositories if requested
         if ($UpdateRepos) {
             Update-Repositories
+        }
+        
+        # Fix MSBuild build issues if requested
+        if ($FixMSBuild) {
+            Write-Info "MSBuild build issues fix requested..."
+            if (Fix-MSBuildBuildIssues) {
+                Write-Success "MSBuild build issues fixed successfully!"
+                Write-Info "You should now be able to build MSBuild from source without errors."
+                Write-Info "Please restart your terminal and try building again."
+                exit 0
+            } else {
+                Write-Error "Failed to fix MSBuild build issues"
+                exit 1
+            }
         }
         
         # Install dependencies

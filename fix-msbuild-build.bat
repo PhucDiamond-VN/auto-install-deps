@@ -6,11 +6,13 @@ echo.
 echo This script will fix the MSBuild build errors related to missing tools:
 echo - TlbExp.exe (Windows SDK tool)
 echo - resgen.exe (Windows SDK tool)
+echo - LocateVisualStudioTask failures
 echo.
-echo Running PowerShell script with appropriate parameters...
+echo Running integrated install-deps.bat script with MSBuild fix...
 echo.
 
-powershell -ExecutionPolicy Bypass -File "install-deps.ps1" -Force -Verbose
+REM Run the integrated batch file with MSBuild fix
+call "install-deps.bat"
 
 echo.
 echo =========================================
