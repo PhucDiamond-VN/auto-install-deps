@@ -1,221 +1,192 @@
-# Auto Install Dependencies for C/C++ Projects v2.0
+# Auto Install Dependencies for C/C++ Compiler
 
-Hệ thống tự động cài đặt tất cả dependencies cần thiết để build C/C++ projects trên Windows với nhiều công cụ mở rộng.
+Script Python tự động cài đặt các dependencies cần thiết cho việc compile C/C++ trên Windows.
 
 ## 🚀 Tính năng
 
-- **Tự động cài đặt** tất cả tools cần thiết
-- **Kiểm tra dependencies** đã có sẵn
-- **Cập nhật PATH** tự động
-- **Kiểm tra sau cài đặt** để đảm bảo hoạt động
-- **Hỗ trợ nhiều phương thức** cài đặt (Chocolatey, direct download, pip)
+- **Visual Studio Build Tools**: Cài đặt MSVC compiler và Windows SDK
+- **MSBuild**: Microsoft build engine cho .NET và C++
+- **MinGW-w64**: Cài đặt GCC compiler cho Windows
+- **CMake**: Hệ thống build cross-platform
+- **Ninja**: Build system nhanh
+- **NuGet**: Package manager cho .NET và C++
+- **Git**: Version control system
+- **vcpkg**: C++ package manager
+- **Make**: Build automation tool
+- **Thư viện C++**: Boost, Eigen, OpenCV
+- **Tự động cấu hình PATH**: Thêm tools vào system PATH
+- **Kiểm tra cài đặt**: Verify tất cả tools hoạt động
 
-## 📋 Dependencies được cài đặt
+## 📋 Yêu cầu hệ thống
 
-### Core Tools
-- **Chocolatey** - Package manager cho Windows
-- **Git** - Version control system
-- **Python** - Programming language
-- **Node.js** - JavaScript runtime cho build tools
+- Windows 10/11 (64-bit)
+- Python 3.7+
+- Kết nối internet
+- Quyền Administrator (khuyến nghị)
 
-### Compilers
-- **Visual Studio Build Tools** - Microsoft C++ compiler và build tools
-- **MinGW-w64** - GNU Compiler Collection cho Windows
-- **Clang/LLVM** - LLVM C/C++ compiler
+## 🛠️ Cài đặt
 
-### Build Tools
-- **CMake** - Cross-platform build system
-- **Ninja** - Fast build system
-- **Make** - Build automation tool
-- **MSBuild** - Microsoft build engine (Enhanced detection & installation from Visual Studio + GitHub source)
+### 1. Cài đặt Python dependencies
 
-### Package Managers
-- **Conan** - C/C++ package manager
-- **vcpkg** - C++ library manager
-
-### Development Tools
-- **Visual Studio Code** - Code editor với C/C++ support
-- **Notepad++** - Text editor với syntax highlighting
-- **7-Zip** - File archiver
-- **WinMerge** - File comparison tool
-
-### Debugging Tools
-- **GDB** - GNU debugger
-- **Valgrind** - Memory error detector
-
-### Testing Tools
-- **Google Test** - C++ testing framework
-- **Catch2** - Modern C++ testing framework
-
-### Documentation Tools
-- **Doxygen** - Documentation generator
-- **Graphviz** - Graph visualization software
-
-### Profiling Tools
-- **Performance Tools** - Visual Studio performance analysis
-- **Intel VTune** - Performance profiler
-
-## 🛠️ Cách sử dụng
-
-### Phương pháp 1: Script Batch (Đơn giản nhất)
-
-1. **Chuẩn bị:**
-   - Đảm bảo PowerShell có sẵn trên hệ thống
-   - Chạy với quyền Administrator (khuyến nghị)
-
-2. **Chạy script:**
-   ```cmd
-   install-deps.bat
-   ```
-
-### Phương pháp 2: PowerShell Script (Đầy đủ tính năng)
-
-1. **Chuẩn bị:**
-   - PowerShell 5.0 trở lên
-   - Quyền Administrator (khuyến nghị)
-
-2. **Chạy script:**
-   ```powershell
-   .\install-deps.ps1
-   ```
-
-3. **Các tham số có sẵn:**
-   ```powershell
-   .\install-deps.ps1 -Force          # Bắt buộc cài đặt tất cả
-   .\install-deps.ps1 -Verbose        # Hiển thị thông tin chi tiết
-   .\install-deps.ps1 -InstallOptional # Cài đặt tools tùy chọn
-   .\install-deps.ps1 -SkipTests      # Bỏ qua kiểm tra sau cài đặt
-   .\install-deps.ps1 -ConfigFile "custom-config.json"
-   ```
-
-### Phương pháp 3: Quick Install (Cài đặt nhanh)
-
-```powershell
-.\quick-install.ps1
+```bash
+pip install -r requirements.txt
 ```
+
+### 2. Chạy script cài đặt
+
+```bash
+python auto_install_deps.py
+```
+
+**Lưu ý**: Khuyến nghị chạy với quyền Administrator để có thể cập nhật system PATH.
 
 ## ⚙️ Cấu hình
 
-Bạn có thể tùy chỉnh file `deps-config.json` để:
+Bạn có thể tùy chỉnh việc cài đặt bằng cách chỉnh sửa file `deps_config.json`:
 
-- Thay đổi danh sách dependencies
-- Cấu hình phương thức cài đặt
-- Điều chỉnh tùy chọn cài đặt
+```json
+{
+    "visual_studio": {
+        "enabled": true,
+        "version": "2022",
+        "components": [
+            "Microsoft.VisualStudio.Workload.VCTools",
+            "Microsoft.VisualStudio.Component.Windows10SDK.19041",
+            "Microsoft.VisualStudio.Component.MSBuild",
+            "Microsoft.VisualStudio.Component.TextTemplating",
+            "Microsoft.VisualStudio.Component.Roslyn.Compiler"
+        ]
+    },
+    "mingw": {
+        "enabled": true,
+        "version": "13.2.0",
+        "architecture": "x86_64"
+    },
+    "cmake": {
+        "enabled": true,
+        "version": "3.28.0"
+    },
+    "ninja": {
+        "enabled": true,
+        "version": "1.11.1"
+    },
+    "msbuild": {
+        "enabled": true,
+        "version": "17.0",
+        "auto_detect": true
+    },
+    "nuget": {
+        "enabled": true,
+        "version": "6.8.0"
+    },
+    "git": {
+        "enabled": true,
+        "version": "2.43.0"
+    },
+    "libraries": {
+        "boost": true,
+        "eigen": true,
+        "opencv": true,
+        "qt": false,
+        "vcpkg": true
+    },
+    "build_tools": {
+        "make": true,
+        "autotools": false
+    }
+}
+```
 
-## 🔧 Yêu cầu hệ thống
-
-- **OS:** Windows 10/11 (x64)
-- **RAM:** Tối thiểu 8GB
-- **Disk:** Tối thiểu 20GB trống
-- **PowerShell:** 5.0 trở lên
-- **Internet:** Kết nối ổn định để download
-
-## 📁 Cấu trúc thư mục
+## 📁 Cấu trúc thư mục sau khi cài đặt
 
 ```
-auto-install-deps/
-├── install-deps.ps1      # Script PowerShell chính
-├── install-deps.bat      # Script batch wrapper
-├── quick-install.ps1     # Script cài đặt nhanh
-├── deps-config.json      # File cấu hình dependencies
-├── check-install.bat     # Script kiểm tra cài đặt
-├── fix-execution-policy.ps1  # Script sửa Execution Policy
-├── fix-execution-policy.bat  # Script batch sửa Execution Policy
-├── simple-check.bat      # Script kiểm tra đơn giản
-├── QUICK-START.md        # Hướng dẫn nhanh
-└── README.md             # Hướng dẫn chi tiết
+%USERPROFILE%\c++_deps\
+├── mingw64\          # MinGW-w64 compiler
+├── cmake\            # CMake build system
+├── ninja\            # Ninja build system
+├── msbuild\          # MSBuild engine
+├── nuget\            # NuGet package manager
+├── git\              # Git version control
+├── vcpkg\            # vcpkg package manager
+├── make\             # Make build tool
+├── boost\            # Boost C++ libraries
+├── eigen\            # Eigen linear algebra library
+└── opencv\           # OpenCV computer vision library
 ```
 
-## 🚨 Lưu ý quan trọng
+## 🔧 Sử dụng sau khi cài đặt
 
-1. **Quyền Administrator:** Một số tools cần quyền admin để cài đặt
-2. **Antivirus:** Có thể chặn một số downloads, hãy tạm thời tắt hoặc thêm exception
-3. **Firewall:** Đảm bảo cho phép PowerShell và Chocolatey truy cập internet
-4. **Restart Terminal:** Sau khi cài đặt xong, restart terminal để PATH có hiệu lực
+### 1. Thiết lập environment
 
-## 🔍 Troubleshooting
+Chạy file `setup_env.bat` được tạo tự động:
 
-### Lỗi thường gặp
-
-1. **"Execution Policy" error:**
-   
-   **Cách 1: Sử dụng script fix tự động**
-   ```cmd
-   fix-execution-policy.bat
-   ```
-   
-   **Cách 2: Sửa thủ công**
-   ```powershell
-   # Kiểm tra execution policy hiện tại
-   Get-ExecutionPolicy -List
-   
-   # Thiết lập cho current user
-   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-   
-   # Hoặc sử dụng Bypass (tạm thời)
-   Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope CurrentUser
-   ```
-   
-   **Cách 3: Chạy với execution policy khác**
-   ```cmd
-   powershell -ExecutionPolicy Bypass -File "install-deps.ps1"
-   ```
-
-2. **Chocolatey không cài được:**
-   - Kiểm tra kết nối internet
-   - Chạy với quyền Administrator
-   - Tạm thời tắt antivirus
-
-3. **Visual Studio Build Tools lỗi:**
-    - Đảm bảo có đủ disk space
-    - Kiểm tra Windows Update
-    - Chạy với quyền Administrator
-    - MSBuild sẽ được cài đặt từ GitHub source nếu Visual Studio không khả dụng
-
-### Kiểm tra cài đặt
-
-#### **Sử dụng script kiểm tra:**
 ```cmd
-check-install.bat
+setup_env.bat
 ```
 
-#### **Kiểm tra thủ công:**
+### 2. Kiểm tra cài đặt
+
 ```cmd
-# Kiểm tra các tools
-git --version
-python --version
+gcc --version
 cmake --version
 ninja --version
-conan --version
+msbuild /version
+nuget help
+git --version
+vcpkg version
+make --version
 ```
 
-## 📞 Hỗ trợ
+### 3. Compile project C++
 
-Nếu gặp vấn đề:
+```cmd
+# Sử dụng GCC
+g++ -o program.exe source.cpp
 
-1. Kiểm tra log lỗi trong terminal
-2. Đảm bảo đã chạy với quyền Administrator
-3. Kiểm tra kết nối internet
-4. Tạm thời tắt antivirus/firewall
+# Sử dụng CMake
+mkdir build && cd build
+cmake ..
+cmake --build .
+```
 
-## 📝 Changelog
+## 🚨 Xử lý lỗi
 
-### Version 2.0.0
-- Thêm nhiều công cụ mới (Clang/LLVM, vcpkg, Make, Node.js)
-- Hỗ trợ development tools (VS Code, Notepad++, 7-Zip, WinMerge)
-- Hỗ trợ debugging tools (GDB, Valgrind)
-- Hỗ trợ testing frameworks (Google Test, Catch2)
-- Hỗ trợ documentation tools (Doxygen, Graphviz)
-- Hỗ trợ profiling tools
-- Cải thiện error handling và logging
-- Thêm tham số -InstallOptional và -SkipTests
+### Lỗi quyền truy cập
+- Chạy script với quyền Administrator
+- Kiểm tra Windows Defender/antivirus
 
-### Version 1.0.0
-- Script cài đặt cơ bản
-- Hỗ trợ Chocolatey, Visual Studio Build Tools, CMake
-- Tự động cập nhật PATH
-- Kiểm tra sau cài đặt
+### Lỗi download
+- Kiểm tra kết nối internet
+- Tăng timeout trong config
+- Tải thủ công và đặt vào thư mục temp
+
+### Lỗi PATH
+- Chạy `setup_env.bat` để thiết lập environment
+- Restart Command Prompt/PowerShell
+- Kiểm tra biến môi trường PATH
+
+## 📝 Ghi chú
+
+- Script sẽ tự động kiểm tra và bỏ qua các tools đã cài đặt
+- File tạm sẽ được dọn dẹp tự động sau khi cài đặt
+- Có thể chạy lại script để cài đặt thêm components
+
+## 🤝 Đóng góp
+
+Nếu bạn gặp vấn đề hoặc muốn cải thiện script, vui lòng:
+
+1. Tạo issue trên GitHub
+2. Fork và submit pull request
+3. Báo cáo lỗi với thông tin chi tiết
 
 ## 📄 License
 
-MIT License - Sử dụng tự do cho mục đích cá nhân và thương mại.
+MIT License - Xem file LICENSE để biết thêm chi tiết.
+
+## 🙏 Cảm ơn
+
+- Visual Studio Team
+- MinGW-w64 contributors
+- CMake developers
+- Ninja build system
+- Các thư viện C++ open source

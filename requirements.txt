@@ -1,0 +1,11 @@
+# Python dependencies for auto_install_deps.py
+# Các thư viện Python cần thiết cho script cài đặt dependencies
+
+# Core dependencies
+pathlib2>=2.3.7; python_version < "3.4"
+typing-extensions>=4.0.0; python_version < "3.8"
+
+# Optional: for better progress bars and user experience
+tqdm>=4.64.0
+colorama>=0.4.6; sys_platform == "win32"
+requests>=2.28.0
