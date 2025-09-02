@@ -27,7 +27,7 @@ Hệ thống tự động cài đặt tất cả dependencies cần thiết đ�
 - **CMake** - Cross-platform build system
 - **Ninja** - Fast build system
 - **Make** - Build automation tool
-- **MSBuild** - Microsoft build engine
+- **MSBuild** - Microsoft build engine (Enhanced detection & installation from Visual Studio + GitHub source)
 
 ### Package Managers
 - **Conan** - C/C++ package manager
@@ -167,9 +167,10 @@ auto-install-deps/
    - Tạm thời tắt antivirus
 
 3. **Visual Studio Build Tools lỗi:**
-   - Đảm bảo có đủ disk space
-   - Kiểm tra Windows Update
-   - Chạy với quyền Administrator
+    - Đảm bảo có đủ disk space
+    - Kiểm tra Windows Update
+    - Chạy với quyền Administrator
+    - MSBuild sẽ được cài đặt từ GitHub source nếu Visual Studio không khả dụng
 
 ### Kiểm tra cài đặt
 

@@ -173,6 +173,14 @@ function Install-VisualStudio {
     $vsInstallations = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\VisualStudio" -ErrorAction SilentlyContinue
     if ($vsInstallations) {
         Write-Success "Visual Studio is already installed"
+        
+        # Check if MSBuild is available in existing installation
+        if (Test-Command "msbuild") {
+            Write-Success "MSBuild is already available in existing Visual Studio installation"
+            return $true
+        } else {
+            Write-Info "MSBuild not found in existing installation, will attempt to add it"
+        }
         return $true
     }
     
@@ -185,16 +193,46 @@ function Install-VisualStudio {
         Write-Info "Downloading Visual Studio Build Tools..."
         Invoke-WebRequest -Uri $vsUrl -OutFile $vsInstaller
         
-        # Install with C++ workload and additional components
-        Write-Info "Installing Visual Studio Build Tools with C++ workload..."
+        # Install with C++ workload and additional components including MSBuild
+        Write-Info "Installing Visual Studio Build Tools with C++ workload and MSBuild..."
         $args = @("--quiet", "--wait", "--add", "Microsoft.VisualStudio.Workload.VCTools")
         $args += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.19041"
         $args += "--add", "Microsoft.VisualStudio.Component.Windows11SDK.22621"
+        $args += "--add", "Microsoft.VisualStudio.Component.MSBuild"
+        $args += "--add", "Microsoft.VisualStudio.Component.Roslyn.Compiler"
+        $args += "--add", "Microsoft.VisualStudio.Component.TextTemplating"
+        $args += "--add", "Microsoft.VisualStudio.Component.NuGet"
+        $args += "--add", "Microsoft.VisualStudio.Component.WebDeploy"
+        $args += "--add", "Microsoft.VisualStudio.Component.MSBuild.MSIL"
+        $args += "--add", "Microsoft.VisualStudio.Component.MSBuild.x64"
         
+        Write-Info "Installation arguments: $($args -join ' ')"
         Start-Process -FilePath $vsInstaller -ArgumentList $args -Wait
+        
+        # Wait for installation to complete and verify
+        Start-Sleep -Seconds 10
         
         if (Test-Path "HKLM:\SOFTWARE\Microsoft\VisualStudio") {
             Write-Success "Visual Studio Build Tools installed successfully"
+            
+            # Verify MSBuild component was installed
+            Write-Info "Verifying MSBuild installation..."
+            Start-Sleep -Seconds 5
+            
+            # Check if MSBuild is now available
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+            
+            if (Test-Command "msbuild") {
+                try {
+                    $version = msbuild /version 2>$null
+                    Write-Success "MSBuild is now available (version: $version)"
+                } catch {
+                    Write-Warning "MSBuild command available but version check failed"
+                }
+            } else {
+                Write-Info "MSBuild not yet available in PATH, will be configured by Install-MSBuild function"
+            }
+            
             return $true
         } else {
             Write-Error "Failed to install Visual Studio Build Tools"
@@ -204,6 +242,224 @@ function Install-VisualStudio {
     catch {
         Write-Error "Error installing Visual Studio Build Tools: $($_.Exception.Message)"
         return $false
+    }
+}
+
+function Install-MSBuild {
+    Write-Info "Checking MSBuild installation..."
+    
+    # Check if MSBuild is already available in PATH
+    if (Test-Command "msbuild") {
+        try {
+            $version = msbuild /version 2>$null
+            if ($version) {
+                Write-Success "MSBuild is already installed and available (version: $version)"
+                return $true
+            }
+        } catch {
+            Write-Warning "MSBuild command exists but version check failed"
+        }
+    }
+    
+    # Try to install MSBuild from GitHub source as a fallback method
+    if (Install-MSBuildFromSource) {
+        return $true
+    }
+    
+    # Enhanced MSBuild path detection with multiple search patterns
+    $msbuildSearchPaths = @(
+        # Visual Studio 2022 (Current)
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\*\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\*\MSBuild\Current\Bin\MSBuild.exe",
+        
+        # Visual Studio 2019
+        "${env:ProgramFiles}\Microsoft Visual Studio\2019\*\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\*\MSBuild\Current\Bin\MSBuild.exe",
+        
+        # Visual Studio 2017
+        "${env:ProgramFiles}\Microsoft Visual Studio\2017\*\MSBuild\15.0\Bin\MSBuild.exe",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2017\*\MSBuild\15.0\Bin\MSBuild.exe",
+        
+        # Standalone MSBuild installations
+        "${env:ProgramFiles}\MSBuild\*\Bin\MSBuild.exe",
+        "${env:ProgramFiles(x86)}\MSBuild\*\Bin\MSBuild.exe",
+        
+        # .NET Framework MSBuild
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\*\*\MSBuild\*\Bin\MSBuild.exe",
+        "${env:ProgramFiles}\Microsoft Visual Studio\*\*\MSBuild\*\Bin\MSBuild.exe",
+        
+        # Additional search paths for newer installations
+        "${env:ProgramFiles}\Microsoft Visual Studio\*\*\MSBuild\*\Bin\MSBuild.exe",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\*\*\MSBuild\*\Bin\MSBuild.exe"
+    )
+    
+    Write-Info "Searching for MSBuild in common installation paths..."
+    $foundMSBuild = $null
+    
+    foreach ($path in $msbuildSearchPaths) {
+        $foundPath = Get-ChildItem -Path $path -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($foundPath) {
+            $foundMSBuild = $foundPath
+            Write-Info "MSBuild found at: $($foundPath.FullName)"
+            break
+        }
+    }
+    
+    if ($foundMSBuild) {
+        Write-Info "Adding MSBuild to PATH..."
+        
+        # Add MSBuild directory to PATH
+        $msbuildDir = Split-Path -Parent $foundMSBuild.FullName
+        $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+        
+        if ($currentPath -notlike "*$msbuildDir*") {
+            $newPath = "$msbuildDir;$currentPath"
+            [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+            $env:Path = "$msbuildDir;$env:Path"
+            Write-Success "MSBuild added to PATH successfully"
+            
+            # Verify MSBuild is now accessible
+            Start-Sleep -Seconds 2
+            if (Test-Command "msbuild") {
+                try {
+                    $version = msbuild /version 2>$null
+                    Write-Success "MSBuild is now accessible (version: $version)"
+                    return $true
+                } catch {
+                    Write-Warning "MSBuild added to PATH but version check failed"
+                }
+            }
+            return $true
+        } else {
+            Write-Success "MSBuild is already in PATH"
+            return $true
+        }
+    }
+    
+    # If MSBuild is not found, try to install it via Visual Studio Build Tools
+    Write-Info "MSBuild not found. Attempting to install via Visual Studio Build Tools..."
+    
+    if (Test-Path "HKLM:\SOFTWARE\Microsoft\VisualStudio") {
+        Write-Info "Visual Studio is installed, checking for MSBuild component..."
+        
+        # Try to find MSBuild in the installed Visual Studio
+        $vsInstallPath = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\VisualStudio" -ErrorAction SilentlyContinue | 
+                         Where-Object { $_.Name -like "*\Setup\VS" } | 
+                         ForEach-Object { 
+                             $installPath = Get-ItemProperty -Path $_.PSPath -Name "InstallDir" -ErrorAction SilentlyContinue
+                             if ($installPath) { $installPath.InstallDir }
+                         } | Select-Object -First 1
+        
+        # Also check for Visual Studio Build Tools
+        if (-not $vsInstallPath) {
+            $vsInstallPath = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\VisualStudio" -ErrorAction SilentlyContinue | 
+                             Where-Object { $_.Name -like "*\Setup\BuildTools" } | 
+                             ForEach-Object { 
+                                 $installPath = Get-ItemProperty -Path $_.PSPath -Name "InstallDir" -ErrorAction SilentlyContinue
+                                 if ($installPath) { $installPath.InstallDir }
+                             } | Select-Object -First 1
+        }
+        
+        if ($vsInstallPath) {
+            Write-Info "Visual Studio installation found at: $vsInstallPath"
+            
+            # Check multiple possible MSBuild locations in this installation
+            $vsMSBuildPaths = @(
+                "MSBuild\Current\Bin\MSBuild.exe",
+                "MSBuild\17.0\Bin\MSBuild.exe",
+                "MSBuild\16.0\Bin\MSBuild.exe",
+                "MSBuild\15.0\Bin\MSBuild.exe",
+                "MSBuild\14.0\Bin\MSBuild.exe",
+                "MSBuild\12.0\Bin\MSBuild.exe"
+            )
+            
+            foreach ($msbuildSubPath in $vsMSBuildPaths) {
+                $msbuildPath = Join-Path $vsInstallPath $msbuildSubPath
+                if (Test-Path $msbuildPath) {
+                    Write-Info "MSBuild found in Visual Studio installation: $msbuildPath"
+                    $msbuildDir = Split-Path -Parent $msbuildPath
+                    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+                    
+                    if ($currentPath -notlike "*$msbuildDir*") {
+                        $newPath = "$msbuildDir;$currentPath"
+                        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+                        $env:Path = "$msbuildDir;$env:Path"
+                        Write-Success "MSBuild added to PATH successfully"
+                        return $true
+                    } else {
+                        Write-Success "MSBuild is already in PATH"
+                        return $true
+                    }
+                }
+            }
+        }
+        
+        Write-Warning "MSBuild component not found in Visual Studio installation"
+        Write-Info "Attempting to modify Visual Studio installation to include MSBuild..."
+        
+        # Try to modify existing Visual Studio installation
+        try {
+            $vsModifier = Get-Command "vs_installer.exe" -ErrorAction SilentlyContinue
+            if ($vsModifier) {
+                Write-Info "Found Visual Studio Installer, attempting to add MSBuild component..."
+                $vsModifierPath = Split-Path -Parent $vsModifier.Source
+                $vsInstaller = Join-Path $vsModifierPath "vs_installer.exe"
+                
+                if (Test-Path $vsInstaller) {
+                    Write-Info "Adding MSBuild component to existing Visual Studio installation..."
+                    Start-Process -FilePath $vsInstaller -ArgumentList "modify", "--add", "Microsoft.VisualStudio.Component.MSBuild", "--quiet", "--norestart" -Wait
+                    
+                    # Wait for modification to complete and check again
+                    Start-Sleep -Seconds 15
+                    return Install-MSBuild
+                }
+            }
+        } catch {
+            Write-Warning "Could not modify existing Visual Studio installation: $($_.Exception.Message)"
+        }
+        
+        # Try to find MSBuild in other common locations
+        Write-Info "Searching for MSBuild in other common locations..."
+        $additionalPaths = @(
+            "${env:ProgramFiles}\Microsoft Visual Studio\*\*\MSBuild\*\Bin",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio\*\*\MSBuild\*\Bin",
+            "${env:ProgramFiles}\MSBuild\*\Bin",
+            "${env:ProgramFiles(x86)}\MSBuild\*\Bin"
+        )
+        
+        foreach ($path in $additionalPaths) {
+            $foundPath = Get-ChildItem -Path $path -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($foundPath) {
+                Write-Info "Found MSBuild in additional location: $($foundPath.FullName)"
+                $msbuildDir = Split-Path -Parent $foundPath.FullName
+                $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+                
+                if ($currentPath -notlike "*$msbuildDir*") {
+                    $newPath = "$msbuildDir;$currentPath"
+                    [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+                    $env:Path = "$msbuildDir;$env:Path"
+                    Write-Success "MSBuild added to PATH from additional location"
+                    return $true
+                }
+            }
+        }
+        
+        Write-Info "You may need to manually modify Visual Studio installation to include MSBuild"
+        return $false
+    } else {
+        Write-Info "Visual Studio not installed. Installing Visual Studio Build Tools with MSBuild..."
+        if (Install-VisualStudio) {
+            # Wait for installation to complete and try to find MSBuild again
+            Write-Info "Waiting for Visual Studio Build Tools installation to complete..."
+            Start-Sleep -Seconds 20
+            
+            # Refresh environment and try again
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+            return Install-MSBuild
+        } else {
+            Write-Error "Failed to install Visual Studio Build Tools"
+            return $false
+        }
     }
 }
 
@@ -478,6 +734,54 @@ function Install-NodeJS {
     }
 }
 
+function Install-DotNetSDK {
+    Write-Info "Checking .NET SDK installation..."
+    
+    if (Test-Command "dotnet") {
+        try {
+            $version = dotnet --version 2>$null
+            if ($version) {
+                Write-Success ".NET SDK is already installed (version: $version)"
+                return $true
+            }
+        } catch {
+            Write-Warning ".NET SDK command exists but version check failed"
+        }
+    }
+    
+    Write-Info "Installing .NET SDK via Chocolatey..."
+    try {
+        choco install dotnet-sdk -y
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success ".NET SDK installed successfully"
+            
+            # Refresh environment variables
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+            
+            # Verify installation
+            if (Test-Command "dotnet") {
+                try {
+                    $version = dotnet --version 2>$null
+                    if ($version) {
+                        Write-Success ".NET SDK is now working (version: $version)"
+                        return $true
+                    }
+                } catch {
+                    Write-Warning ".NET SDK installed but version check failed"
+                }
+            }
+            return $true
+        } else {
+            Write-Error "Failed to install .NET SDK"
+            return $false
+        }
+    }
+    catch {
+        Write-Error "Error installing .NET SDK: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 function Install-DevelopmentTools {
     if (-not $InstallOptional) {
         Write-Info "Skipping optional development tools (use -InstallOptional to install)"
@@ -584,7 +888,8 @@ function Install-Dependencies {
     $coreTools = @(
         @{ Name = "Git"; Function = "Install-Git" },
         @{ Name = "Python"; Function = "Install-Python" },
-        @{ Name = "Node.js"; Function = "Install-NodeJS" }
+        @{ Name = "Node.js"; Function = "Install-NodeJS" },
+        @{ Name = ".NET SDK"; Function = "Install-DotNetSDK" }
     )
     
     $successCount = 0
@@ -605,6 +910,7 @@ function Install-Dependencies {
     # Install compilers and build tools
     $buildTools = @(
         @{ Name = "Visual Studio Build Tools"; Function = "Install-VisualStudio" },
+        @{ Name = "MSBuild"; Function = "Install-MSBuild" },
         @{ Name = "MinGW"; Function = "Install-MinGW" },
         @{ Name = "Clang/LLVM"; Function = "Install-Clang" },
         @{ Name = "CMake"; Function = "Install-CMake" },
@@ -653,6 +959,42 @@ function Update-Path {
         "$env:USERPROFILE\vcpkg"
     )
     
+    # Add MSBuild paths with enhanced detection
+    $msbuildPaths = @(
+        # Visual Studio 2022
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\*\MSBuild\Current\Bin",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\*\MSBuild\Current\Bin",
+        
+        # Visual Studio 2019
+        "${env:ProgramFiles}\Microsoft Visual Studio\2019\*\MSBuild\Current\Bin",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\*\MSBuild\Current\Bin",
+        
+        # Visual Studio 2017
+        "${env:ProgramFiles}\Microsoft Visual Studio\2017\*\MSBuild\15.0\Bin",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2017\*\MSBuild\15.0\Bin",
+        
+        # Standalone MSBuild
+        "${env:ProgramFiles}\MSBuild\*\Bin",
+        "${env:ProgramFiles(x86)}\MSBuild\*\Bin",
+        
+        # .NET Framework MSBuild
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\*\*\MSBuild\*\Bin",
+        "${env:ProgramFiles}\Microsoft Visual Studio\*\*\MSBuild\*\Bin",
+        
+        # MSBuild from source
+        "$env:USERPROFILE\msbuild-source\artifacts\bin\bootstrap\net472\MSBuild\Current\Bin",
+        "$env:USERPROFILE\msbuild-source\artifacts\bin\MSBuild\net472"
+    )
+    
+    Write-Info "Searching for MSBuild paths to add to PATH..."
+    foreach ($msbuildPath in $msbuildPaths) {
+        $foundPath = Get-ChildItem -Path $msbuildPath -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($foundPath) {
+            Write-Info "Found MSBuild path: $($foundPath.FullName)"
+            $paths += $foundPath.FullName
+        }
+    }
+    
     $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
     $newPaths = @()
     
@@ -680,7 +1022,7 @@ function Test-Installation {
     
     Write-Info "Testing installation..."
     
-    $tools = @("git", "python", "cmake", "ninja", "conan", "node")
+    $tools = @("git", "python", "cmake", "ninja", "conan", "node", "dotnet")
     $successCount = 0
     
     foreach ($tool in $tools) {
@@ -692,8 +1034,201 @@ function Test-Installation {
         }
     }
     
-    Write-Info "Installation test completed: $successCount out of $($tools.Count) tools working"
-    return $successCount -eq $tools.Count
+    # Special test for MSBuild with detailed diagnostics
+    Write-Info "Testing MSBuild installation..."
+    if (Test-Command "msbuild") {
+        try {
+            $msbuildVersion = msbuild /version 2>$null
+            if ($msbuildVersion) {
+                Write-Success "MSBuild is working correctly (version: $msbuildVersion)"
+                $successCount++
+            } else {
+                Write-Warning "MSBuild command exists but version check failed"
+            }
+        } catch {
+            Write-Warning "MSBuild command exists but version check failed"
+        }
+    } else {
+        Write-Warning "MSBuild is not working correctly"
+        
+        # Provide detailed diagnostics for MSBuild
+        Write-Info "Running MSBuild diagnostics..."
+        Test-MSBuildInstallation
+    }
+    
+    Write-Info "Installation test completed: $successCount out of $($tools.Count + 1) tools working"
+    return $successCount -eq ($tools.Count + 1)
+}
+
+function Test-MSBuildInstallation {
+    Write-Info "MSBuild Diagnostics - Checking common installation locations..."
+    
+    $msbuildPaths = @(
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\*\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\*\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles}\Microsoft Visual Studio\2019\*\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\*\MSBuild\Current\Bin\MSBuild.exe",
+        "${env:ProgramFiles}\Microsoft Visual Studio\2017\*\MSBuild\15.0\Bin\MSBuild.exe",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2017\*\MSBuild\15.0\Bin\MSBuild.exe",
+        "${env:ProgramFiles}\MSBuild\*\Bin\MSBuild.exe",
+        "${env:ProgramFiles(x86)}\MSBuild\*\Bin\MSBuild.exe"
+    )
+    
+    $foundAny = $false
+    foreach ($path in $msbuildPaths) {
+        $foundPath = Get-ChildItem -Path $path -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($foundPath) {
+            Write-Info "Found MSBuild at: $($foundPath.FullName)"
+            $foundAny = $true
+            
+            # Try to run this specific MSBuild
+            try {
+                $version = & $foundPath.FullName /version 2>$null
+                if ($version) {
+                    Write-Success "MSBuild at this location works (version: $version)"
+                    Write-Info "You can add this directory to PATH manually:"
+                    Write-Info "  $((Split-Path -Parent $foundPath.FullName))"
+                }
+            } catch {
+                Write-Warning "MSBuild at this location exists but doesn't work"
+            }
+        }
+    }
+    
+    if (-not $foundAny) {
+        Write-Warning "No MSBuild found in common locations"
+        Write-Info "Recommendations:"
+        Write-Info "1. Run install-deps.bat again with -Force flag"
+        Write-Info "2. Check if Visual Studio Build Tools installation completed successfully"
+        Write-Info "3. Manually install MSBuild from Microsoft website"
+    }
+}
+
+function Install-MSBuildFromSource {
+    Write-Info "Attempting to install MSBuild from GitHub source code..."
+    
+    # Check prerequisites
+    if (-not (Test-Command "git")) {
+        Write-Warning "Git is required to clone MSBuild source code"
+        return $false
+    }
+    
+    if (-not (Test-Command "dotnet")) {
+        Write-Info "Installing .NET SDK first..."
+        try {
+            choco install dotnet-sdk -y
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "Failed to install .NET SDK via Chocolatey"
+                return $false
+            }
+            # Refresh environment
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+        } catch {
+            Write-Warning "Could not install .NET SDK: $($_.Exception.Message)"
+            return $false
+        }
+    }
+    
+    # Create MSBuild source directory
+    $msbuildSourceDir = "$env:USERPROFILE\msbuild-source"
+    if (Test-Path $msbuildSourceDir) {
+        Write-Info "MSBuild source directory already exists, cleaning up..."
+        Remove-Item -Path $msbuildSourceDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    
+    try {
+        # Clone MSBuild repository
+        Write-Info "Cloning MSBuild source code from GitHub..."
+        git clone https://github.com/dotnet/msbuild.git $msbuildSourceDir
+        
+        if (-not (Test-Path "$msbuildSourceDir\MSBuild.sln")) {
+            Write-Error "Failed to clone MSBuild repository"
+            return $false
+        }
+        
+        Set-Location $msbuildSourceDir
+        
+        # Check if build.cmd exists (Windows build script)
+        if (Test-Path "build.cmd") {
+            Write-Info "Building MSBuild using build.cmd..."
+            
+            # Run the build script
+            Start-Process -FilePath "cmd" -ArgumentList "/c", "build.cmd" -Wait -NoNewWindow
+            
+            # Check if build was successful
+            $bootstrapPath = "artifacts\bin\bootstrap\net472\MSBuild\Current\Bin\MSBuild.exe"
+            if (Test-Path $bootstrapPath) {
+                Write-Success "MSBuild built successfully from source!"
+                
+                # Add to PATH
+                $msbuildDir = (Resolve-Path $bootstrapPath).Parent.FullName
+                $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+                
+                if ($currentPath -notlike "*$msbuildDir*") {
+                    $newPath = "$msbuildDir;$currentPath"
+                    [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+                    $env:Path = "$msbuildDir;$env:Path"
+                    Write-Success "MSBuild from source added to PATH"
+                    
+                    # Test the built MSBuild
+                    try {
+                        $version = & $bootstrapPath /version 2>$null
+                        if ($version) {
+                            Write-Success "MSBuild from source is working (version: $version)"
+                            return $true
+                        }
+                    } catch {
+                        Write-Warning "MSBuild from source exists but version check failed"
+                    }
+                }
+                
+                return $true
+            } else {
+                Write-Warning "MSBuild build completed but executable not found at expected location"
+            }
+        } else {
+            Write-Info "build.cmd not found, trying alternative build methods..."
+            
+            # Try using dotnet build
+            if (Test-Command "dotnet") {
+                Write-Info "Attempting to build MSBuild using dotnet build..."
+                
+                # Restore packages first
+                dotnet restore
+                
+                # Build the solution
+                dotnet build MSBuild.sln --configuration Release --no-restore
+                
+                # Check for output
+                $outputPath = "artifacts\bin\MSBuild\net472\MSBuild.exe"
+                if (Test-Path $outputPath) {
+                    Write-Success "MSBuild built successfully using dotnet build!"
+                    
+                    # Add to PATH
+                    $msbuildDir = (Resolve-Path $outputPath).Parent.FullName
+                    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+                    
+                    if ($currentPath -notlike "*$msbuildDir*") {
+                        $newPath = "$msbuildDir;$currentPath"
+                        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+                        $env:Path = "$msbuildDir;$env:Path"
+                        Write-Success "MSBuild from source added to PATH"
+                        return $true
+                    }
+                }
+            }
+        }
+        
+        Write-Warning "MSBuild build from source was not successful"
+        return $false
+        
+    } catch {
+        Write-Error "Error building MSBuild from source: $($_.Exception.Message)"
+        return $false
+    } finally {
+        # Return to original directory
+        Set-Location $PSScriptRoot
+    }
 }
 
 # Main execution

@@ -90,6 +90,15 @@ if %errorlevel% equ 0 (
 )
 
 echo.
+echo Checking MSBuild...
+msbuild /version >nul 2>&1
+if %errorlevel% equ 0 (
+    echo ✓ MSBuild is installed
+) else (
+    echo ✗ MSBuild is not found
+)
+
+echo.
 echo Checking Package Managers...
 echo ---------------------------
 echo Checking Conan...
