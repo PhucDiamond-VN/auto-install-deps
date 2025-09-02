@@ -6,7 +6,8 @@ param(
     [switch]$Force,
     [switch]$Verbose,
     [switch]$InstallOptional,
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [switch]$UpdateRepos
 )
 
 # Colors for output
@@ -205,6 +206,31 @@ function Install-VisualStudio {
         $vsArgs += "--add", "Microsoft.VisualStudio.Component.MSBuild.MSIL"
         $vsArgs += "--add", "Microsoft.VisualStudio.Component.MSBuild.x64"
         
+        # Add additional components needed for MSBuild from source
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.18362"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.17763"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.16299"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.15063"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.14393"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.10586"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows10SDK.10240"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows8SDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows8SDK.8.1"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.Windows8SDK.8.0"
+        
+        # Add .NET Framework SDK components
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NetFx35SDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NetFx40SDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NetFx45SDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NetFx461SDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.NetFx472SDK"
+        
+        # Add additional build tools
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.VSSDK"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.VisualStudioInstallerProjects"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.SQL.CLR"
+        $vsArgs += "--add", "Microsoft.VisualStudio.Component.SQL.SSDT"
+        
         Write-Info "Installation arguments: $($vsArgs -join ' ')"
         Start-Process -FilePath $vsInstaller -ArgumentList $vsArgs -Wait
         
@@ -253,6 +279,21 @@ function Install-MSBuild {
             $version = msbuild /version 2>$null
             if ($version) {
                 Write-Success "MSBuild is already installed and available (version: $version)"
+                
+                # Check if it's from source and show repository status
+                $msbuildSourceDir = "$env:USERPROFILE\msbuild-source"
+                if (Test-Path "$msbuildSourceDir\.git") {
+                    try {
+                        Set-Location $msbuildSourceDir
+                        $lastCommit = git log -1 --format=%cd --date=iso 2>$null
+                        if ($lastCommit) {
+                            Write-Info "MSBuild source last updated: $lastCommit"
+                        }
+                    } catch {
+                        Write-Debug "Could not check MSBuild repository status: $($_.Exception.Message)"
+                    }
+                }
+                
                 return $true
             }
         } catch {
@@ -263,6 +304,28 @@ function Install-MSBuild {
     # Try to install MSBuild from GitHub source as a fallback method
     if (Install-MSBuildFromSource) {
         return $true
+    }
+    
+    # If MSBuild is still not available, try to install Windows SDK components
+    Write-Info "MSBuild not available, attempting to install Windows SDK components..."
+    if (Install-WindowsSDKComponents) {
+        Write-Info "Windows SDK components installed, checking if MSBuild is now available..."
+        Start-Sleep -Seconds 10
+        
+        # Refresh environment and check again
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+        
+        if (Test-Command "msbuild") {
+            try {
+                $version = msbuild /version 2>$null
+                if ($version) {
+                    Write-Success "MSBuild is now available after Windows SDK installation (version: $version)"
+                    return $true
+                }
+            } catch {
+                Write-Warning "MSBuild command available but version check failed"
+            }
+        }
     }
     
     # Enhanced MSBuild path detection with multiple search patterns
@@ -618,6 +681,21 @@ function Install-Vcpkg {
     $vcpkgPath = "$env:USERPROFILE\vcpkg"
     if (Test-Path "$vcpkgPath\vcpkg.exe") {
         Write-Success "vcpkg is already installed"
+        
+        # Optionally update the repository if it's been a while
+        if (Test-Path "$vcpkgPath\.git") {
+            try {
+                Set-Location $vcpkgPath
+                $lastFetch = git log -1 --format=%cd --date=iso 2>$null
+                if ($lastFetch) {
+                    Write-Info "Last vcpkg update: $lastFetch"
+                    Write-Info "Repository is up to date"
+                }
+            } catch {
+                Write-Debug "Could not check vcpkg repository status: $($_.Exception.Message)"
+            }
+        }
+        
         return $true
     }
     
@@ -629,8 +707,45 @@ function Install-Vcpkg {
         
         Set-Location $vcpkgPath
         
-        # Clone vcpkg repository
-        if (-not (Test-Path ".git")) {
+        # Check if vcpkg repository already exists and handle different scenarios
+        if (Test-Path ".git") {
+            Write-Info "vcpkg repository already exists, checking status..."
+            
+            try {
+                # Check if repository is clean and up-to-date
+                $gitStatus = git status --porcelain 2>$null
+                $gitRemote = git remote get-url origin 2>$null
+                
+                if ($gitRemote -eq "https://github.com/Microsoft/vcpkg.git") {
+                    if ([string]::IsNullOrEmpty($gitStatus)) {
+                        Write-Info "vcpkg repository is clean and ready for use"
+                        
+                        # Check if vcpkg.exe already exists
+                        if (Test-Path "vcpkg.exe") {
+                            Write-Success "vcpkg is already built and ready"
+                            return $true
+                        } else {
+                            Write-Info "vcpkg.exe not found, will build it..."
+                        }
+                    } else {
+                        Write-Warning "vcpkg repository has uncommitted changes, cleaning up..."
+                        Remove-Item -Path ".git" -Recurse -Force -ErrorAction SilentlyContinue
+                        Write-Info "Cloning fresh vcpkg repository..."
+                        git clone https://github.com/Microsoft/vcpkg.git .
+                    }
+                } else {
+                    Write-Warning "vcpkg repository origin mismatch, cleaning up..."
+                    Remove-Item -Path ".git" -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-Info "Cloning fresh vcpkg repository..."
+                    git clone https://github.com/Microsoft/vcpkg.git .
+                }
+            } catch {
+                Write-Warning "Error checking existing vcpkg repository: $($_.Exception.Message)"
+                Write-Info "Cleaning up and cloning fresh repository..."
+                Remove-Item -Path ".git" -Recurse -Force -ErrorAction SilentlyContinue
+                git clone https://github.com/Microsoft/vcpkg.git .
+            }
+        } else {
             Write-Info "Cloning vcpkg repository..."
             git clone https://github.com/Microsoft/vcpkg.git .
         }
@@ -1128,17 +1243,159 @@ function Install-MSBuildFromSource {
         }
     }
     
+    # Check for required Visual Studio components
+    Write-Info "Checking for required Visual Studio components..."
+    
+    # First, run diagnostics to understand the current state
+    Test-VisualStudioInstallation
+    
+    # Install missing Windows SDK components that are required for MSBuild build
+    Write-Info "Installing required Windows SDK components for MSBuild build..."
+    if (-not (Install-WindowsSDKComponents)) {
+        Write-Warning "Failed to install some Windows SDK components, but continuing with build attempt..."
+    }
+    
+    $requiredComponents = @(
+        "Microsoft.VisualStudio.Component.Windows10SDK.19041",
+        "Microsoft.VisualStudio.Component.Windows10SDK.18362",
+        "Microsoft.VisualStudio.Component.Windows10SDK.17763",
+        "Microsoft.VisualStudio.Component.Windows10SDK.16299",
+        "Microsoft.VisualStudio.Component.Windows10SDK.15063",
+        "Microsoft.VisualStudio.Component.Windows10SDK.14393",
+        "Microsoft.VisualStudio.Component.Windows10SDK.10586",
+        "Microsoft.VisualStudio.Component.Windows10SDK.10240",
+        "Microsoft.VisualStudio.Component.Windows8SDK",
+        "Microsoft.VisualStudio.Component.Windows8SDK.8.1",
+        "Microsoft.VisualStudio.Component.Windows8SDK.8.0",
+        "Microsoft.VisualStudio.Component.NetFx35SDK",
+        "Microsoft.VisualStudio.Component.NetFx40SDK",
+        "Microsoft.VisualStudio.Component.NetFx45SDK",
+        "Microsoft.VisualStudio.Component.NetFx461SDK",
+        "Microsoft.VisualStudio.Component.NetFx472SDK"
+    )
+    
+    $missingComponents = @()
+    foreach ($component in $requiredComponents) {
+        if (-not (Test-VisualStudioComponent $component)) {
+            $missingComponents += $component
+        }
+    }
+    
+    if ($missingComponents.Count -gt 0) {
+        Write-Warning "Missing required Visual Studio components for MSBuild build:"
+        foreach ($component in $missingComponents) {
+            Write-Warning "  - $component"
+        }
+        Write-Info "Attempting to install missing components..."
+        
+        if (-not (Install-MissingVisualStudioComponents $missingComponents)) {
+            Write-Warning "Failed to install required Visual Studio components via installer"
+            Write-Info "Attempting alternative approach - installing Visual Studio Build Tools with all required components..."
+            
+            # Try to install Visual Studio Build Tools with all required components
+            if (Install-VisualStudio) {
+                Write-Info "Visual Studio Build Tools installed, checking if MSBuild is now available..."
+                Start-Sleep -Seconds 10
+                
+                # Refresh environment and check again
+                $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+                
+                if (Test-Command "msbuild") {
+                    try {
+                        $version = msbuild /version 2>$null
+                        if ($version) {
+                            Write-Success "MSBuild is now available after Visual Studio installation (version: $version)"
+                            return $true
+                        }
+                    } catch {
+                        Write-Warning "MSBuild command available but version check failed"
+                    }
+                }
+                
+                Write-Info "MSBuild still not available, continuing with source build attempt..."
+            } else {
+                Write-Warning "Visual Studio Build Tools installation also failed"
+            }
+        }
+    }
+    
     # Create MSBuild source directory
     $msbuildSourceDir = "$env:USERPROFILE\msbuild-source"
+    
+    # Check if directory exists and handle different scenarios
     if (Test-Path $msbuildSourceDir) {
-        Write-Info "MSBuild source directory already exists, cleaning up..."
-        Remove-Item -Path $msbuildSourceDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Info "MSBuild source directory already exists, checking status..."
+        
+        # Check if it's a valid git repository
+        if (Test-Path "$msbuildSourceDir\.git") {
+            try {
+                Set-Location $msbuildSourceDir
+                
+                # Check if repository is clean and up-to-date
+                $gitStatus = git status --porcelain 2>$null
+                $gitRemote = git remote get-url origin 2>$null
+                
+                if ($gitRemote -eq "https://github.com/dotnet/msbuild.git") {
+                    if ([string]::IsNullOrEmpty($gitStatus)) {
+                        Write-Info "MSBuild repository is clean and ready for building"
+                        
+                        # Check if build artifacts already exist
+                        $bootstrapPath = "artifacts\bin\bootstrap\net472\MSBuild\Current\Bin\MSBuild.exe"
+                        $outputPath = "artifacts\bin\MSBuild\net472\MSBuild.exe"
+                        
+                        if ((Test-Path $bootstrapPath) -or (Test-Path $outputPath)) {
+                            Write-Info "MSBuild build artifacts already exist, attempting to use them..."
+                            
+                            # Try to use existing build artifacts
+                            if (Test-Path $bootstrapPath) {
+                                $msbuildDir = (Resolve-Path $bootstrapPath).Parent.FullName
+                                $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+                                
+                                if ($currentPath -notlike "*$msbuildDir*") {
+                                    $newPath = "$msbuildDir;$currentPath"
+                                    [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+                                    $env:Path = "$msbuildDir;$env:Path"
+                                    Write-Success "Existing MSBuild from source added to PATH"
+                                    return $true
+                                } else {
+                                    Write-Success "MSBuild from source is already in PATH"
+                                    return $true
+                                }
+                            }
+                        }
+                        
+                        # Repository exists and is clean, proceed with building
+                        Write-Info "Proceeding with existing repository for building..."
+                    } else {
+                        Write-Warning "MSBuild repository has uncommitted changes, cleaning up..."
+                        Remove-Item -Path $msbuildSourceDir -Recurse -Force -ErrorAction SilentlyContinue
+                        Write-Info "Cloning fresh MSBuild repository..."
+                        git clone https://github.com/dotnet/msbuild.git $msbuildSourceDir
+                    }
+                } else {
+                    Write-Warning "MSBuild repository origin mismatch, cleaning up..."
+                    Remove-Item -Path $msbuildSourceDir -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-Info "Cloning fresh MSBuild repository..."
+                    git clone https://github.com/dotnet/msbuild.git $msbuildSourceDir
+                }
+            } catch {
+                Write-Warning "Error checking existing repository: $($_.Exception.Message)"
+                Write-Info "Cleaning up and cloning fresh repository..."
+                Remove-Item -Path $msbuildSourceDir -Recurse -Force -ErrorAction SilentlyContinue
+                git clone https://github.com/dotnet/msbuild.git $msbuildSourceDir
+            }
+        } else {
+            Write-Warning "MSBuild directory exists but is not a valid git repository, cleaning up..."
+            Remove-Item -Path $msbuildSourceDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Info "Cloning fresh MSBuild repository..."
+            git clone https://github.com/dotnet/msbuild.git $msbuildSourceDir
+        }
+    } else {
+        Write-Info "Cloning MSBuild source code from GitHub..."
+        git clone https://github.com/dotnet/msbuild.git $msbuildSourceDir
     }
     
     try {
-        # Clone MSBuild repository
-        Write-Info "Cloning MSBuild source code from GitHub..."
-        git clone https://github.com/dotnet/msbuild.git $msbuildSourceDir
         
         if (-not (Test-Path "$msbuildSourceDir\MSBuild.sln")) {
             Write-Error "Failed to clone MSBuild repository"
@@ -1193,9 +1450,11 @@ function Install-MSBuildFromSource {
                 Write-Info "Attempting to build MSBuild using dotnet build..."
                 
                 # Restore packages first
+                Write-Info "Restoring NuGet packages..."
                 dotnet restore
                 
                 # Build the solution
+                Write-Info "Building MSBuild solution..."
                 dotnet build MSBuild.sln --configuration Release --no-restore
                 
                 # Check for output
@@ -1219,6 +1478,12 @@ function Install-MSBuildFromSource {
         }
         
         Write-Warning "MSBuild build from source was not successful"
+        Write-Info "Common build issues and solutions:"
+        Write-Info "1. Missing Windows SDK components - Run script with -Force to reinstall Visual Studio"
+        Write-Info "2. Missing .NET Framework SDK - Install .NET Framework 4.7.2 Developer Pack"
+        Write-Info "3. Missing build tools - Ensure all Visual Studio components are installed"
+        Write-Info "4. PATH issues - Restart terminal after installation"
+        
         return $false
         
     } catch {
@@ -1246,6 +1511,11 @@ function Main {
             Write-Warning "Not running as administrator. Some installations may fail."
         }
         
+        # Update repositories if requested
+        if ($UpdateRepos) {
+            Update-Repositories
+        }
+        
         # Install dependencies
         if (Install-Dependencies) {
             # Update PATH
@@ -1267,6 +1537,600 @@ function Main {
         Write-Error "Unexpected error: $($_.Exception.Message)"
         exit 1
     }
+}
+
+function Test-VisualStudioComponent {
+    param([string]$ComponentId)
+    
+    try {
+        # Check registry for component installation
+        $regPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\*\Setup\VS\Components\$ComponentId"
+        $component = Get-ChildItem -Path $regPath -ErrorAction SilentlyContinue | Select-Object -First 1
+        
+        if ($component) {
+            $installPath = Get-ItemProperty -Path $component.PSPath -Name "InstallDir" -ErrorAction SilentlyContinue
+            if ($installPath -and $installPath.InstallDir) {
+                return $true
+            }
+        }
+        
+        # Also check BuildTools
+        $regPathBuildTools = "HKLM:\SOFTWARE\Microsoft\VisualStudio\*\Setup\BuildTools\Components\$ComponentId"
+        $componentBuildTools = Get-ChildItem -Path $regPathBuildTools -ErrorAction SilentlyContinue | Select-Object -First 1
+        
+        if ($componentBuildTools) {
+            $installPath = Get-ItemProperty -Path $componentBuildTools.PSPath -Name "InstallDir" -ErrorAction SilentlyContinue
+            if ($installPath -and $installPath.InstallDir) {
+                return $true
+            }
+        }
+        
+        return $false
+    } catch {
+        return $false
+    }
+}
+
+function Test-VisualStudioInstallation {
+    Write-Info "Checking Visual Studio installation status..."
+    
+    # Check if Visual Studio is installed at all
+    $vsInstallations = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\VisualStudio" -ErrorAction SilentlyContinue
+    if (-not $vsInstallations) {
+        Write-Warning "No Visual Studio installation found in registry"
+        return $false
+    }
+    
+    Write-Info "Found Visual Studio installations:"
+    foreach ($vs in $vsInstallations) {
+        $vsName = Split-Path $vs.Name -Leaf
+        Write-Info "  - $vsName"
+        
+        # Check if it's a valid installation
+        try {
+            $installPath = Get-ItemProperty -Path $vs.PSPath -Name "InstallDir" -ErrorAction SilentlyContinue
+            if ($installPath -and $installPath.InstallDir) {
+                Write-Info "    InstallDir: $($installPath.InstallDir)"
+                
+                # Check if installer exists
+                $installerPath = Join-Path $installPath.InstallDir "Installer\vs_installer.exe"
+                if (Test-Path $installerPath) {
+                    Write-Success "    Installer found: $installerPath"
+                } else {
+                    Write-Warning "    Installer not found at expected location"
+                }
+            }
+        } catch {
+            Write-Warning "    Could not read installation details"
+        }
+    }
+    
+    # Check for Visual Studio Installer in common locations
+    Write-Info "Checking for Visual Studio Installer..."
+    $installerFound = $false
+    
+    $commonPaths = @(
+        "${env:ProgramFiles}\Microsoft Visual Studio\Installer",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer",
+        "${env:LOCALAPPDATA}\Microsoft\VisualStudio\Installer"
+    )
+    
+    foreach ($path in $commonPaths) {
+        if (Test-Path "$path\vs_installer.exe") {
+            Write-Success "Visual Studio Installer found at: $path\vs_installer.exe"
+            $installerFound = $true
+            break
+        }
+    }
+    
+    if (-not $installerFound) {
+        Write-Warning "Visual Studio Installer not found in common locations"
+        Write-Info "This may prevent adding new components to existing installations"
+    }
+    
+    return $true
+}
+
+function Install-MissingVisualStudioComponents {
+    param([string[]]$ComponentIds)
+    
+    Write-Info "Attempting to install missing Visual Studio components..."
+    
+    # Try to find Visual Studio Installer with enhanced detection
+    $vsInstaller = $null
+    
+    # Method 1: Check if it's in PATH
+    try {
+        $vsInstallerCmd = Get-Command "vs_installer.exe" -ErrorAction SilentlyContinue
+        if ($vsInstallerCmd) {
+            $vsInstaller = $vsInstallerCmd.Source
+            Write-Info "Found Visual Studio Installer in PATH: $vsInstaller"
+        }
+    } catch {
+        Write-Debug "Visual Studio Installer not found in PATH"
+    }
+    
+    # Method 2: Check common installation locations
+    if (-not $vsInstaller) {
+        Write-Info "Searching for Visual Studio Installer in common locations..."
+        $commonPaths = @(
+            "${env:ProgramFiles}\Microsoft Visual Studio\Installer",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer",
+            "${env:LOCALAPPDATA}\Microsoft\VisualStudio\Installer",
+            "${env:ProgramFiles}\Microsoft Visual Studio\2022\*\Installer",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\*\Installer",
+            "${env:ProgramFiles}\Microsoft Visual Studio\2019\*\Installer",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\*\Installer",
+            "${env:ProgramFiles}\Microsoft Visual Studio\2017\*\Installer",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2017\*\Installer"
+        )
+        
+        foreach ($path in $commonPaths) {
+            $foundPath = Get-ChildItem -Path $path -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($foundPath) {
+                $installerPath = Join-Path $foundPath.FullName "vs_installer.exe"
+                if (Test-Path $installerPath) {
+                    $vsInstaller = $installerPath
+                    Write-Info "Found Visual Studio Installer at: $vsInstaller"
+                    break
+                }
+            }
+        }
+    }
+    
+    # Method 3: Try to download and install Visual Studio Installer if not found
+    if (-not $vsInstaller) {
+        Write-Warning "Visual Studio Installer not found in any common locations"
+        Write-Info "Attempting to download and install Visual Studio Installer..."
+        
+        try {
+            # Download Visual Studio Installer
+            $installerUrl = "https://aka.ms/vs/17/release/vs_installer.exe"
+            $installerPath = "$env:TEMP\vs_installer.exe"
+            
+            Write-Info "Downloading Visual Studio Installer from: $installerUrl"
+            Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+            
+            if (Test-Path $installerPath) {
+                $vsInstaller = $installerPath
+                Write-Success "Downloaded Visual Studio Installer to: $vsInstaller"
+            } else {
+                Write-Error "Failed to download Visual Studio Installer"
+                return $false
+            }
+        } catch {
+            Write-Error "Error downloading Visual Studio Installer: $($_.Exception.Message)"
+            return $false
+        }
+    }
+    
+    if (-not $vsInstaller -or -not (Test-Path $vsInstaller)) {
+        Write-Error "Visual Studio Installer not found and could not be downloaded"
+        Write-Info "Please install Visual Studio Build Tools manually from: https://aka.ms/vs/17/release/vs_buildtools.exe"
+        return $false
+    }
+    
+    Write-Info "Using Visual Studio Installer at: $vsInstaller"
+    
+    # Build arguments for component installation
+    $installArgs = @("modify", "--quiet", "--norestart")
+    foreach ($componentId in $ComponentIds) {
+        $installArgs += "--add", $componentId
+    }
+    
+    Write-Info "Installing components: $($ComponentIds -join ', ')"
+    Write-Info "Command: $vsInstaller $($installArgs -join ' ')"
+    
+    try {
+        $process = Start-Process -FilePath $vsInstaller -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
+        if ($process.ExitCode -eq 0) {
+            Write-Success "Components installed successfully"
+            return $true
+        } else {
+            Write-Warning "Component installation completed with exit code: $($process.ExitCode)"
+            
+            # Try alternative approach - install components via workload
+            Write-Info "Attempting alternative installation method..."
+            $workloadArgs = @("install", "--quiet", "--norestart", "--add", "Microsoft.VisualStudio.Workload.VCTools")
+            foreach ($componentId in $ComponentIds) {
+                $workloadArgs += "--add", $componentId
+            }
+            
+            Write-Info "Trying workload installation: $vsInstaller $($workloadArgs -join ' ')"
+            $workloadProcess = Start-Process -FilePath $vsInstaller -ArgumentList $workloadArgs -Wait -PassThru -NoNewWindow
+            
+            if ($workloadProcess.ExitCode -eq 0) {
+                Write-Success "Components installed successfully via workload method"
+                return $true
+            } else {
+                Write-Warning "Workload installation also failed with exit code: $($workloadProcess.ExitCode)"
+                return $false
+            }
+        }
+    } catch {
+        Write-Error "Error installing components: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Install-WindowsSDKDirectly {
+    Write-Info "Attempting to install Windows SDK directly..."
+    
+    try {
+        # Try to download Windows SDK directly
+        $sdkUrl = "https://go.microsoft.com/fwlink/p/?linkid=2196241"  # Windows 10 SDK
+        $sdkInstaller = "$env:TEMP\winsdk_installer.exe"
+        
+        Write-Info "Downloading Windows 10 SDK directly..."
+        
+        # Clean up any existing file
+        if (Test-Path $sdkInstaller) {
+            Remove-Item -Path $sdkInstaller -Force -ErrorAction SilentlyContinue
+        }
+        
+        try {
+            Invoke-WebRequest -Uri $sdkUrl -OutFile $sdkInstaller -UseBasicParsing -TimeoutSec 600
+            Start-Sleep -Seconds 2
+            
+            if (Test-Path $sdkInstaller) {
+                $fileSize = (Get-Item $sdkInstaller).Length
+                if ($fileSize -gt 1000000) { # Should be at least 1MB
+                    Write-Success "Windows SDK downloaded (Size: $([math]::Round($fileSize/1MB, 2)) MB)"
+                    
+                    # Install Windows SDK
+                    Write-Info "Installing Windows 10 SDK..."
+                    $sdkArgs = @("/quiet", "/norestart")
+                    $sdkProcess = Start-Process -FilePath $sdkInstaller -ArgumentList $sdkArgs -Wait -PassThru -NoNewWindow
+                    
+                    if ($sdkProcess.ExitCode -eq 0) {
+                        Write-Success "Windows 10 SDK installed successfully"
+                        
+                        # Clean up installer
+                        Remove-Item -Path $sdkInstaller -Force -ErrorAction SilentlyContinue
+                        return $true
+                    } else {
+                        Write-Warning "Windows SDK installation completed with exit code: $($sdkProcess.ExitCode)"
+                        return $false
+                    }
+                } else {
+                    Write-Error "Downloaded Windows SDK file is too small, likely corrupted"
+                    Remove-Item -Path $sdkInstaller -Force -ErrorAction SilentlyContinue
+                    return $false
+                }
+            } else {
+                Write-Error "Failed to download Windows SDK"
+                return $false
+            }
+        } catch {
+            Write-Error "Error downloading Windows SDK: $($_.Exception.Message)"
+            return $false
+        }
+    } catch {
+        Write-Error "Error in Install-WindowsSDKDirectly: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Install-WindowsSDKComponents {
+    Write-Info "Installing missing Windows SDK components for MSBuild build..."
+    
+    # Check if we already have the required tools
+    $requiredTools = @("TlbExp.exe", "resgen.exe")
+    $missingTools = @()
+    
+    foreach ($tool in $requiredTools) {
+        $found = $false
+        
+        # Search in common Windows SDK locations
+        $sdkPaths = @(
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64",
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x86",
+            "${env:ProgramFiles(x86)}\Windows Kits\8.1\bin\x64",
+            "${env:ProgramFiles(x86)}\Windows Kits\8.1\bin\x86",
+            "${env:ProgramFiles(x86)}\Windows Kits\8.0\bin\x64",
+            "${env:ProgramFiles(x86)}\Windows Kits\8.0\bin\x86"
+        )
+        
+        foreach ($sdkPath in $sdkPaths) {
+            $foundPath = Get-ChildItem -Path $sdkPath -Name $tool -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($foundPath) {
+                $found = $true
+                Write-Info "Found $tool at: $sdkPath\$foundPath"
+                break
+            }
+        }
+        
+        if (-not $found) {
+            $missingTools += $tool
+        }
+    }
+    
+    if ($missingTools.Count -eq 0) {
+        Write-Success "All required Windows SDK tools are already available"
+        return $true
+    }
+    
+    Write-Warning "Missing Windows SDK tools: $($missingTools -join ', ')"
+    Write-Info "Attempting to install Windows SDK components..."
+    
+    # Try to install Windows SDK via Visual Studio Installer first
+    if (Install-WindowsSDKViaVisualStudio) {
+        Write-Info "Windows SDK installed via Visual Studio, checking if tools are now available..."
+        Start-Sleep -Seconds 10
+        
+        # Refresh environment and check again
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+        
+        # Check if tools are now available
+        $stillMissing = @()
+        foreach ($tool in $missingTools) {
+            $found = $false
+            foreach ($sdkPath in $sdkPaths) {
+                $foundPath = Get-ChildItem -Path $sdkPath -Name $tool -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($foundPath) {
+                    $found = $true
+                    Write-Success "Found $tool at: $sdkPath\$foundPath"
+                    break
+                }
+            }
+            if (-not $found) {
+                $stillMissing += $tool
+            }
+        }
+        
+        if ($stillMissing.Count -eq 0) {
+            Write-Success "All Windows SDK tools are now available after Visual Studio installation"
+            return $true
+        } else {
+            Write-Warning "Some tools still missing after Visual Studio installation: $($stillMissing -join ', ')"
+        }
+    }
+    
+    # Try direct Windows SDK installation as fallback
+    if (Install-WindowsSDKDirectly) {
+        Write-Info "Windows SDK installed directly, checking if tools are now available..."
+        Start-Sleep -Seconds 15
+        
+        # Check if tools are now available
+        $stillMissing = @()
+        foreach ($tool in $missingTools) {
+            $found = $false
+            foreach ($sdkPath in $sdkPaths) {
+                $foundPath = Get-ChildItem -Path $sdkPath -Name $tool -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($foundPath) {
+                    $found = $true
+                    Write-Success "Found $tool at: $sdkPath\$foundPath"
+                    break
+                }
+            }
+            if (-not $found) {
+                $stillMissing += $tool
+            }
+        }
+        
+        if ($stillMissing.Count -eq 0) {
+            Write-Success "All Windows SDK tools are now available after direct installation"
+            return $true
+        } else {
+            Write-Warning "Some tools still missing after direct installation: $($stillMissing -join ', ')"
+        }
+    }
+    
+    # Final attempt - try to install specific .NET Framework SDKs
+    Write-Info "Attempting to install .NET Framework SDKs that contain the missing tools..."
+    if (Install-NetFrameworkSDKs) {
+        Write-Info ".NET Framework SDKs installed, checking if tools are now available..."
+        Start-Sleep -Seconds 10
+        
+        # Check if tools are now available
+        $stillMissing = @()
+        foreach ($tool in $missingTools) {
+            $found = $false
+            foreach ($sdkPath in $sdkPaths) {
+                $foundPath = Get-ChildItem -Path $sdkPath -Name $tool -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($foundPath) {
+                    $found = $true
+                    Write-Success "Found $tool at: $sdkPath\$foundPath"
+                    break
+                }
+            }
+            if (-not $found) {
+                $stillMissing += $tool
+            }
+        }
+        
+        if ($stillMissing.Count -eq 0) {
+            Write-Success "All Windows SDK tools are now available after .NET Framework SDK installation"
+            return $true
+        } else {
+            Write-Warning "Some tools still missing after .NET Framework SDK installation: $($stillMissing -join ', ')"
+        }
+    }
+    
+    Write-Error "Failed to install required Windows SDK tools: $($missingTools -join ', ')"
+    Write-Info "These tools are required for building MSBuild from source"
+    Write-Info "Please install Windows 10 SDK manually from: https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/"
+    return $false
+}
+
+function Install-WindowsSDKViaVisualStudio {
+    Write-Info "Attempting to install Windows SDK via Visual Studio Installer..."
+    
+    # Try to find Visual Studio Installer
+    $vsInstaller = $null
+    
+    # Method 1: Check if it's in PATH
+    try {
+        $vsInstallerCmd = Get-Command "vs_installer.exe" -ErrorAction SilentlyContinue
+        if ($vsInstallerCmd) {
+            $vsInstaller = $vsInstallerCmd.Source
+            Write-Info "Found Visual Studio Installer in PATH: $vsInstaller"
+        }
+    } catch {
+        Write-Debug "Visual Studio Installer not found in PATH"
+    }
+    
+    # Method 2: Check common installation locations
+    if (-not $vsInstaller) {
+        $commonPaths = @(
+            "${env:ProgramFiles}\Microsoft Visual Studio\Installer",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer",
+            "${env:LOCALAPPDATA}\Microsoft\VisualStudio\Installer"
+        )
+        
+        foreach ($path in $commonPaths) {
+            if (Test-Path "$path\vs_installer.exe") {
+                $vsInstaller = "$path\vs_installer.exe"
+                Write-Info "Found Visual Studio Installer at: $vsInstaller"
+                break
+            }
+        }
+    }
+    
+    if (-not $vsInstaller -or -not (Test-Path $vsInstaller)) {
+        Write-Warning "Visual Studio Installer not found, cannot install Windows SDK via this method"
+        return $false
+    }
+    
+    Write-Info "Installing Windows SDK components via Visual Studio Installer..."
+    
+    # Install Windows 10 SDK components
+    $sdkComponents = @(
+        "Microsoft.VisualStudio.Component.Windows10SDK.19041",
+        "Microsoft.VisualStudio.Component.Windows10SDK.18362",
+        "Microsoft.VisualStudio.Component.Windows10SDK.17763",
+        "Microsoft.VisualStudio.Component.Windows10SDK.16299",
+        "Microsoft.VisualStudio.Component.Windows10SDK.15063",
+        "Microsoft.VisualStudio.Component.Windows10SDK.14393",
+        "Microsoft.VisualStudio.Component.Windows10SDK.10586",
+        "Microsoft.VisualStudio.Component.Windows10SDK.10240"
+    )
+    
+    $installArgs = @("modify", "--quiet", "--norestart")
+    foreach ($component in $sdkComponents) {
+        $installArgs += "--add", $component
+    }
+    
+    try {
+        Write-Info "Installing Windows SDK components: $($sdkComponents -join ', ')"
+        $process = Start-Process -FilePath $vsInstaller -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
+        
+        if ($process.ExitCode -eq 0) {
+            Write-Success "Windows SDK components installed successfully"
+            return $true
+        } else {
+            Write-Warning "Windows SDK installation completed with exit code: $($process.ExitCode)"
+            return $false
+        }
+    } catch {
+        Write-Error "Error installing Windows SDK components: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Install-NetFrameworkSDKs {
+    Write-Info "Installing .NET Framework SDKs that contain the missing tools..."
+    
+    # Try to install .NET Framework SDKs via Chocolatey
+    $netFrameworkSDKs = @("netfx-4.7.2-devpack", "netfx-4.6.1-devpack", "netfx-4.5.2-devpack")
+    
+    foreach ($sdk in $netFrameworkSDKs) {
+        Write-Info "Installing $sdk..."
+        try {
+            choco install $sdk -y
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "$sdk installed successfully"
+            } else {
+                Write-Warning "Failed to install $sdk"
+            }
+        } catch {
+            Write-Warning "Error installing $sdk - $($_.Exception.Message)"
+        }
+    }
+    
+    # Also try to download and install .NET Framework 4.7.2 Developer Pack directly
+    Write-Info "Attempting to install .NET Framework 4.7.2 Developer Pack directly..."
+    try {
+        $netfxUrl = "https://go.microsoft.com/fwlink/?LinkId=863262"  # .NET Framework 4.7.2 Developer Pack
+        $netfxInstaller = "$env:TEMP\netfx472_devpack.exe"
+        
+        Write-Info "Downloading .NET Framework 4.7.2 Developer Pack..."
+        Invoke-WebRequest -Uri $netfxUrl -OutFile $netfxInstaller -UseBasicParsing
+        
+        if (Test-Path $netfxInstaller) {
+            Write-Info "Installing .NET Framework 4.7.2 Developer Pack..."
+            $netfxArgs = @("/quiet", "/norestart")
+            $netfxProcess = Start-Process -FilePath $netfxInstaller -ArgumentList $netfxArgs -Wait -PassThru -NoNewWindow
+            
+            if ($netfxProcess.ExitCode -eq 0) {
+                Write-Success ".NET Framework 4.7.2 Developer Pack installed successfully"
+                
+                # Clean up installer
+                Remove-Item -Path $netfxInstaller -Force -ErrorAction SilentlyContinue
+                return $true
+            } else {
+                Write-Warning ".NET Framework installation completed with exit code: $($netfxProcess.ExitCode)"
+            }
+            
+            # Clean up installer
+            Remove-Item -Path $netfxInstaller -Force -ErrorAction SilentlyContinue
+        }
+    } catch {
+        Write-Warning "Error installing .NET Framework 4.7.2 Developer Pack: $($_.Exception.Message)"
+    }
+    
+    return $false
+}
+
+function Update-Repositories {
+    Write-Info "Checking for repository updates..."
+    
+    # Update MSBuild repository if it exists
+    $msbuildSourceDir = "$env:USERPROFILE\msbuild-source"
+    if (Test-Path "$msbuildSourceDir\.git") {
+        try {
+            Set-Location $msbuildSourceDir
+            Write-Info "Updating MSBuild repository..."
+            git fetch origin 2>$null
+            $localCommit = git rev-parse HEAD 2>$null
+            $remoteCommit = git rev-parse origin/main 2>$null
+            
+            if ($localCommit -ne $remoteCommit) {
+                Write-Info "MSBuild repository has updates, pulling latest changes..."
+                git pull origin main 2>$null
+                Write-Success "MSBuild repository updated successfully"
+            } else {
+                Write-Info "MSBuild repository is already up to date"
+            }
+        } catch {
+            Write-Warning "Could not update MSBuild repository: $($_.Exception.Message)"
+        }
+    }
+    
+    # Update vcpkg repository if it exists
+    $vcpkgPath = "$env:USERPROFILE\vcpkg"
+    if (Test-Path "$vcpkgPath\.git") {
+        try {
+            Set-Location $vcpkgPath
+            Write-Info "Updating vcpkg repository..."
+            git fetch origin 2>$null
+            $localCommit = git rev-parse HEAD 2>$null
+            $remoteCommit = git rev-parse origin/master 2>$null
+            
+            if ($localCommit -ne $remoteCommit) {
+                Write-Info "vcpkg repository has updates, pulling latest changes..."
+                git pull origin master 2>$null
+                Write-Success "vcpkg repository updated successfully"
+            } else {
+                Write-Info "vcpkg repository is already up to date"
+            }
+        } catch {
+            Write-Warning "Could not update vcpkg repository: $($_.Exception.Message)"
+        }
+    }
+    
+    # Return to original directory
+    Set-Location $PSScriptRoot
 }
 
 # Run main function
