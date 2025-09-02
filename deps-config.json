@@ -1,0 +1,228 @@
+{
+  "project_name": "C/C++ Dependencies Auto Installer",
+  "version": "2.0.0",
+  "description": "Configuration file for automatic C/C++ dependencies installation with extended tools",
+  "dependencies": {
+    "core_tools": {
+      "chocolatey": {
+        "name": "Chocolatey",
+        "description": "Package manager for Windows",
+        "required": true,
+        "install_method": "powershell_script",
+        "url": "https://community.chocolatey.org/install.ps1"
+      },
+      "git": {
+        "name": "Git",
+        "description": "Version control system",
+        "required": true,
+        "install_method": "chocolatey",
+        "package_name": "git"
+      },
+      "python": {
+        "name": "Python",
+        "description": "Python programming language",
+        "required": true,
+        "install_method": "chocolatey",
+        "package_name": "python"
+      },
+      "nodejs": {
+        "name": "Node.js",
+        "description": "JavaScript runtime for build tools",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "nodejs"
+      }
+    },
+    "compilers": {
+      "visual_studio": {
+        "name": "Visual Studio Build Tools",
+        "description": "Microsoft C++ compiler and build tools",
+        "required": true,
+        "install_method": "direct_download",
+        "url": "https://aka.ms/vs/17/release/vs_buildtools.exe",
+        "workloads": [
+          "Microsoft.VisualStudio.Workload.VCTools",
+          "Microsoft.VisualStudio.Component.Windows10SDK.19041",
+          "Microsoft.VisualStudio.Component.Windows11SDK.22621"
+        ]
+      },
+      "mingw": {
+        "name": "MinGW-w64",
+        "description": "GNU Compiler Collection for Windows",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "mingw"
+      },
+      "clang": {
+        "name": "Clang",
+        "description": "LLVM C/C++ compiler",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "llvm"
+      }
+    },
+    "build_tools": {
+      "cmake": {
+        "name": "CMake",
+        "description": "Cross-platform build system",
+        "required": true,
+        "install_method": "chocolatey",
+        "package_name": "cmake"
+      },
+      "ninja": {
+        "name": "Ninja",
+        "description": "Fast build system",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "ninja"
+      },
+      "make": {
+        "name": "Make",
+        "description": "Build automation tool",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "make"
+      },
+      "msbuild": {
+        "name": "MSBuild",
+        "description": "Microsoft build engine",
+        "required": false,
+        "install_method": "visual_studio_component"
+      }
+    },
+    "package_managers": {
+      "conan": {
+        "name": "Conan",
+        "description": "C/C++ package manager",
+        "required": false,
+        "install_method": "pip",
+        "package_name": "conan"
+      },
+      "vcpkg": {
+        "name": "vcpkg",
+        "description": "C++ library manager",
+        "required": false,
+        "install_method": "git_clone",
+        "url": "https://github.com/Microsoft/vcpkg.git"
+      }
+    },
+    "development_tools": {
+      "vscode": {
+        "name": "Visual Studio Code",
+        "description": "Code editor with C/C++ support",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "vscode"
+      },
+      "notepad_plus_plus": {
+        "name": "Notepad++",
+        "description": "Text editor with syntax highlighting",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "notepadplusplus"
+      },
+      "7zip": {
+        "name": "7-Zip",
+        "description": "File archiver",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "7zip"
+      },
+      "winmerge": {
+        "name": "WinMerge",
+        "description": "File comparison tool",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "winmerge"
+      }
+    },
+    "debugging_tools": {
+      "gdb": {
+        "name": "GDB",
+        "description": "GNU debugger",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "gdb"
+      },
+      "valgrind": {
+        "name": "Valgrind",
+        "description": "Memory error detector",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "valgrind"
+      }
+    },
+    "testing_tools": {
+      "googletest": {
+        "name": "Google Test",
+        "description": "C++ testing framework",
+        "required": false,
+        "install_method": "vcpkg",
+        "package_name": "gtest"
+      },
+      "catch2": {
+        "name": "Catch2",
+        "description": "Modern C++ testing framework",
+        "required": false,
+        "install_method": "vcpkg",
+        "package_name": "catch2"
+      }
+    },
+    "documentation_tools": {
+      "doxygen": {
+        "name": "Doxygen",
+        "description": "Documentation generator",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "doxygen"
+      },
+      "graphviz": {
+        "name": "Graphviz",
+        "description": "Graph visualization software",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "graphviz"
+      }
+    },
+    "profiling_tools": {
+      "perf": {
+        "name": "Performance Tools",
+        "description": "Performance analysis tools",
+        "required": false,
+        "install_method": "visual_studio_component"
+      },
+      "vtune": {
+        "name": "Intel VTune Profiler",
+        "description": "Performance profiler",
+        "required": false,
+        "install_method": "chocolatey",
+        "package_name": "intel-oneapi-vtune"
+      }
+    }
+  },
+  "system_requirements": {
+    "os": ["Windows 10", "Windows 11"],
+    "architecture": ["x64"],
+    "ram": "8GB",
+    "disk_space": "20GB"
+  },
+  "installation_options": {
+    "force_install": false,
+    "skip_existing": true,
+    "update_path": true,
+    "test_after_install": true,
+    "install_optional": false
+  },
+  "paths": {
+    "cmake_bin": "$env:ProgramFiles\\CMake\\bin",
+    "git_bin": "$env:ProgramFiles\\Git\\bin",
+    "python_scripts": "$env:APPDATA\\Python\\Python*\\Scripts",
+    "vcpkg_root": "$env:USERPROFILE\\vcpkg",
+    "llvm_bin": "$env:ProgramFiles\\LLVM\\bin"
+  },
+  "post_install_actions": [
+    "setup_vcpkg",
+    "configure_environment",
+    "install_vscode_extensions"
+  ]
+}
