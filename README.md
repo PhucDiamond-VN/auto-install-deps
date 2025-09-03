@@ -1,192 +1,259 @@
-# Auto Install Dependencies for C/C++ Compiler
+# Auto C/C++ Dependencies Installer
 
-Script Python tự động cài đặt các dependencies cần thiết cho việc compile C/C++ trên Windows.
+🔧 **Tự động cài đặt tất cả dependencies cần thiết cho C/C++ development**
 
-## 🚀 Tính năng
+Công cụ này sẽ tự động phát hiện hệ điều hành và cài đặt tất cả các công cụ cần thiết để phát triển C/C++, bao gồm compiler, build tools, và package managers.
 
-- **Visual Studio Build Tools**: Cài đặt MSVC compiler và Windows SDK
-- **MSBuild**: Microsoft build engine cho .NET và C++
-- **MinGW-w64**: Cài đặt GCC compiler cho Windows
-- **CMake**: Hệ thống build cross-platform
-- **Ninja**: Build system nhanh
-- **NuGet**: Package manager cho .NET và C++
-- **Git**: Version control system
-- **vcpkg**: C++ package manager
-- **Make**: Build automation tool
-- **Thư viện C++**: Boost, Eigen, OpenCV
-- **Tự động cấu hình PATH**: Thêm tools vào system PATH
-- **Kiểm tra cài đặt**: Verify tất cả tools hoạt động
+## ✨ Tính năng
 
-## 📋 Yêu cầu hệ thống
+- 🖥️ **Hỗ trợ đa nền tảng**: Windows, Linux, macOS
+- 🔨 **Cài đặt Compiler**: GCC, Clang, MSVC
+- 🏗️ **Build Tools**: CMake, Ninja
+- 📦 **Package Managers**: vcpkg, Conan
+- 🛠️ **Công cụ bổ trợ**: Git, pkg-config
+- 🔄 **Tự động cập nhật PATH**
+- 📝 **Logging chi tiết**
+- ✅ **Kiểm tra cài đặt**
 
-- Windows 10/11 (64-bit)
-- Python 3.7+
-- Kết nối internet
-- Quyền Administrator (khuyến nghị)
+## 🚀 Cách sử dụng
 
-## 🛠️ Cài đặt
-
-### 1. Cài đặt Python dependencies
+### Cài đặt dependencies
 
 ```bash
+# Cài đặt dependencies cho Python script
 pip install -r requirements.txt
+
+# Chạy installer
+python auto_install_cpp_deps.py
 ```
 
-### 2. Chạy script cài đặt
+### Chạy với quyền Administrator (Windows)
 
 ```bash
-python auto_install_deps.py
+# Mở Command Prompt/PowerShell với quyền Administrator
+python auto_install_cpp_deps.py
 ```
 
-**Lưu ý**: Khuyến nghị chạy với quyền Administrator để có thể cập nhật system PATH.
+### Các tùy chọn
 
-## ⚙️ Cấu hình
+```bash
+# Xem trợ giúp
+python auto_install_cpp_deps.py --help
 
-Bạn có thể tùy chỉnh việc cài đặt bằng cách chỉnh sửa file `deps_config.json`:
+# Chỉ kiểm tra các công cụ đã cài đặt
+python auto_install_cpp_deps.py --verify-only
 
-```json
-{
-    "visual_studio": {
-        "enabled": true,
-        "version": "2022",
-        "components": [
-            "Microsoft.VisualStudio.Workload.VCTools",
-            "Microsoft.VisualStudio.Component.Windows10SDK.19041",
-            "Microsoft.VisualStudio.Component.MSBuild",
-            "Microsoft.VisualStudio.Component.TextTemplating",
-            "Microsoft.VisualStudio.Component.Roslyn.Compiler"
-        ]
-    },
-    "mingw": {
-        "enabled": true,
-        "version": "13.2.0",
-        "architecture": "x86_64"
-    },
-    "cmake": {
-        "enabled": true,
-        "version": "3.28.0"
-    },
-    "ninja": {
-        "enabled": true,
-        "version": "1.11.1"
-    },
-    "msbuild": {
-        "enabled": true,
-        "version": "17.0",
-        "auto_detect": true
-    },
-    "nuget": {
-        "enabled": true,
-        "version": "6.8.0"
-    },
-    "git": {
-        "enabled": true,
-        "version": "2.43.0"
-    },
-    "libraries": {
-        "boost": true,
-        "eigen": true,
-        "opencv": true,
-        "qt": false,
-        "vcpkg": true
-    },
-    "build_tools": {
-        "make": true,
-        "autotools": false
-    }
-}
+# Chạy mà không cần quyền admin (có thể hạn chế tính năng)
+python auto_install_cpp_deps.py --no-admin
 ```
 
-## 📁 Cấu trúc thư mục sau khi cài đặt
+## 📋 Các công cụ được cài đặt
 
-```
-%USERPROFILE%\c++_deps\
-├── mingw64\          # MinGW-w64 compiler
-├── cmake\            # CMake build system
-├── ninja\            # Ninja build system
-├── msbuild\          # MSBuild engine
-├── nuget\            # NuGet package manager
-├── git\              # Git version control
-├── vcpkg\            # vcpkg package manager
-├── make\             # Make build tool
-├── boost\            # Boost C++ libraries
-├── eigen\            # Eigen linear algebra library
-└── opencv\           # OpenCV computer vision library
-```
+### Windows
+- **Visual Studio Build Tools** (MSVC Compiler)
+- **MSBuild** (Microsoft Build Engine từ Microsoft.VisualStudio.Workload.VCTools)
+- **MSYS2** (từ MSYS2.MSYS2 workload với đầy đủ MinGW toolchain)
+- **MinGW-w64 GCC/G++** (64-bit MinGW compiler suite)
+- **Windows SDK** (Windows 10/11 SDK với tất cả header files: windows.h, winuser.h, etc.)
+- **CMake** (Build system generator)
+- **Ninja** (Build system)
+- **vcpkg** (Package manager)
+- **Conan** (Package manager)
+- **Git** (Version control)
+- **pkg-config** (Library configuration)
 
-## 🔧 Sử dụng sau khi cài đặt
+### Linux
+- **GCC/G++** (Compiler)
+- **GDB** (Debugger)
+- **Make** (Build tool)
+- **CMake** (Build system generator)
+- **Ninja** (Build system)
+- **vcpkg** (Package manager)
+- **Conan** (Package manager)
+- **Git** (Version control)
 
-### 1. Thiết lập environment
+### macOS
+- **Xcode Command Line Tools** (Clang compiler)
+- **Homebrew** (Package manager)
+- **CMake** (Build system generator)
+- **Ninja** (Build system)
+- **LLVM** (Compiler infrastructure)
+- **vcpkg** (Package manager)
+- **Conan** (Package manager)
 
-Chạy file `setup_env.bat` được tạo tự động:
+## 🔧 Cấu hình môi trường
 
-```cmd
-setup_env.bat
-```
+Script sẽ tự động:
 
-### 2. Kiểm tra cài đặt
+1. **Cập nhật PATH environment variable** với các công cụ mới
+2. **Thiết lập VCPKG_ROOT** environment variable
+3. **Cấu hình shell profiles** (.bashrc, .zshrc, etc.)
+4. **Integrate vcpkg** với Visual Studio (Windows)
+5. **Tạo Conan profile** mặc định
 
-```cmd
-gcc --version
+## 📁 Thư mục cài đặt
+
+- **Windows**: `C:\Program Files\CppDeps\`
+- **Linux/macOS (với quyền root)**: `/usr/local/`
+- **Linux/macOS (user)**: `~/.local/`
+
+## ⚠️ Yêu cầu hệ thống
+
+- **Python 3.6+**
+- **Internet connection** để tải xuống các công cụ
+- **Quyền Administrator/sudo** (khuyến nghị cho cài đặt đầy đủ)
+- **Git** (sẽ được cài đặt tự động nếu chưa có)
+
+## 🔍 Kiểm tra cài đặt
+
+Sau khi cài đặt, script sẽ tự động kiểm tra:
+
+```bash
+# Kiểm tra compiler
+gcc --version       # MinGW GCC
+g++ --version       # MinGW G++
+cl                  # MSVC compiler
+
+# Kiểm tra build tools
 cmake --version
 ninja --version
-msbuild /version
-nuget help
-git --version
+msbuild -version    # MSBuild
+mingw32-make --version  # MinGW Make
+
+# Kiểm tra package managers
 vcpkg version
-make --version
+conan --version
+
+# Chạy verification với debug info
+python auto_install_cpp_deps.py --verify-only
+
+# Cài đặt riêng từng component
+python install_msys2_only.py      # Cài đặt MSYS2 + MinGW
+python install_mingw_only.py      # Cài đặt MinGW packages trong MSYS2 có sẵn
+python install_cmake_only.py      # Cài đặt CMake
+python install_windows_sdk_only.py # Cài đặt Windows SDK + Headers
+python fix_msys2.py              # Sửa chữa MSYS2 khi gặp lỗi pacman
+python test_debug.py             # Test debug features
+python test_windows_sdk.py       # Test Windows SDK & headers
+python test_mingw.py             # Test MinGW packages & compilation
+python test_mingw_simple.py      # Test MinGW nhanh (recommended)
 ```
 
-### 3. Compile project C++
+## 🛠️ Xử lý sự cố
 
-```cmd
-# Sử dụng GCC
-g++ -o program.exe source.cpp
+### Windows
 
-# Sử dụng CMake
-mkdir build && cd build
-cmake ..
-cmake --build .
+1. **Chạy với quyền Administrator**
+2. **Tắt Windows Defender** tạm thời nếu bị chặn download
+3. **Kiểm tra Windows Update** để đảm bảo hệ thống mới nhất
+4. **Chạy verification mode**: `python auto_install_cpp_deps.py --verify-only`
+5. **Khởi động lại terminal/command prompt** sau khi cài đặt
+6. **Kiểm tra PATH environment variable** thủ công
+
+### Debug và Troubleshooting
+
+Script cung cấp thông tin debug chi tiết:
+
+```bash
+# Chạy với debug info
+python auto_install_cpp_deps.py --verify-only
 ```
 
-## 🚨 Xử lý lỗi
+**Thông tin debug bao gồm:**
+- PATH environment hiện tại
+- Các biến môi trường quan trọng (MSYS2_ROOT, MSBuildPath, VCPKG_ROOT)
+- Kiểm tra các thư mục cài đặt thông thường
+- Tìm kiếm thủ công các công cụ
+- Version information của từng tool
 
-### Lỗi quyền truy cập
-- Chạy script với quyền Administrator
-- Kiểm tra Windows Defender/antivirus
+### Các vấn đề thường gặp:
 
-### Lỗi download
-- Kiểm tra kết nối internet
-- Tăng timeout trong config
-- Tải thủ công và đặt vào thư mục temp
+1. **"Command not found" sau khi cài đặt**
+   - Khởi động lại terminal/command prompt
+   - Kiểm tra PATH có chứa thư mục cài đặt không
+   - Chạy `python auto_install_cpp_deps.py --verify-only` để debug
 
-### Lỗi PATH
-- Chạy `setup_env.bat` để thiết lập environment
-- Restart Command Prompt/PowerShell
-- Kiểm tra biến môi trường PATH
+2. **MSVC compiler không tìm thấy**
+   - Đảm bảo Visual Studio Build Tools đã được cài đặt
+   - Kiểm tra PATH có chứa thư mục MSVC không
+   - Chạy script với quyền Administrator
 
-## 📝 Ghi chú
+3. **MinGW tools không hoạt động / "target not found"**
+   - **Cài đặt MinGW packages riêng**: `python install_mingw_only.py`
+   - Chạy `python install_msys2_only.py` để cài đặt MSYS2 riêng
+   - **Sửa chữa MSYS2**: `python fix_msys2.py`
+   - Kiểm tra MSYS2 đã được cài đặt đầy đủ
+   - Chạy `pacman -Syu` để cập nhật MSYS2
+   - Kiểm tra PATH có chứa `C:\msys64\mingw64\bin` không
+   - **Thử cài đặt thủ công**:
+     ```bash
+     pacman -Syu
+     pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-g++ mingw-w64-x86_64-gdb mingw-w64-x86_64-make
+     ```
 
-- Script sẽ tự động kiểm tra và bỏ qua các tools đã cài đặt
-- File tạm sẽ được dọn dẹp tự động sau khi cài đặt
-- Có thể chạy lại script để cài đặt thêm components
+**4. MSYS2/Pacman errors ("target not found")**
+   - Chạy `python fix_msys2.py` để sửa chữa MSYS2
+   - Script sẽ reset pacman databases và keyring
+   - Khởi động lại MSYS2 environment
+   - Cài đặt lại MSYS2 từ đầu nếu cần
+
+5. **CMake không tìm thấy**
+   - Chạy `python install_cmake_only.py` để cài đặt CMake riêng
+   - Kiểm tra các thư mục cài đặt thông thường
+   - Thử cài đặt thủ công từ website chính thức
+
+6. **Windows header files (windows.h, etc.) không tìm thấy**
+   - Chạy `python install_windows_sdk_only.py` để cài đặt Windows SDK
+   - Mở Visual Studio Installer và cài đặt Windows SDK component
+   - Kiểm tra biến môi trường INCLUDE và LIB
+   - Tải Windows SDK từ Microsoft website
+
+7. **Script không chạy được**
+   - Đảm bảo có Python 3.6+ được cài đặt
+   - Cài đặt dependencies: `pip install -r requirements.txt`
+   - Chạy với quyền Administrator trên Windows
+
+### Linux
+
+1. **Cập nhật package manager**: `sudo apt update` hoặc `sudo yum update`
+2. **Cài đặt curl/wget**: `sudo apt install curl wget`
+3. **Kiểm tra internet connection**
+
+### macOS
+
+1. **Cài đặt Xcode từ App Store** trước khi chạy
+2. **Chấp nhận Xcode license**: `sudo xcodebuild -license accept`
+3. **Cài đặt Homebrew thủ công** nếu cần
+
+## 📝 Log files
+
+Script tạo log chi tiết về quá trình cài đặt. Nếu có lỗi, kiểm tra:
+
+- Console output
+- System logs
+- Package manager logs
 
 ## 🤝 Đóng góp
 
-Nếu bạn gặp vấn đề hoặc muốn cải thiện script, vui lòng:
+Nếu bạn gặp vấn đề hoặc muốn thêm tính năng:
 
-1. Tạo issue trên GitHub
-2. Fork và submit pull request
-3. Báo cáo lỗi với thông tin chi tiết
+1. Tạo issue mô tả chi tiết vấn đề
+2. Fork repository và tạo pull request
+3. Test trên nhiều platform khác nhau
 
 ## 📄 License
 
 MIT License - Xem file LICENSE để biết thêm chi tiết.
 
-## 🙏 Cảm ơn
+## 🆘 Hỗ trợ
 
-- Visual Studio Team
-- MinGW-w64 contributors
-- CMake developers
-- Ninja build system
-- Các thư viện C++ open source
+Nếu cần hỗ trợ:
+
+1. **Kiểm tra log output** để xác định lỗi
+2. **Chạy với `--verify-only`** để kiểm tra trạng thái hiện tại
+3. **Thử cài đặt thủ công** các công cụ bị lỗi
+4. **Tạo issue** với thông tin chi tiết về hệ thống và lỗi
+
+---
+
+🎉 **Chúc bạn coding vui vẻ với C/C++!**
